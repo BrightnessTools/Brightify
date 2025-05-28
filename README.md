@@ -84,7 +84,20 @@ First step:
 
     Import brightify 
 
-An example of usage is detailed in /examples/verification.py. You can also find different MCPL files there in the `/examples` folder. These are examples which I have used for the arxiv paper which you can find below.
+An example of usage is detailed in
+
+> /examples/verification.py
+
+For running this example, you will need an MCPL file which you can download from below:
+
+> https://zenodo.org/records/15537265?token=eyJhbGciOiJIUzUxMiJ9.eyJpZCI6ImZiMDZkM2M5LTdhNjEtNDc3Mi1iNGZhLWU3MTAzNzMxNTBkMSIsImRhdGEiOnt9LCJyYW5kb20iOiIyZGZjNzk1ZjczYTZkODkwNWVkZjc2MWJlMDdjNzdiMiJ9.1wo5IMfgg7P7pZ0UNy04Z-d89Mu02v4Ma-qtA_R4K_8M2b9ZiyuUwFBaFsgy03gH-Xy1qHkP155rpdpR3wbqkQ
+
+If you do simulations with PHITS, the PHITS input file for creating of this MCPL file is included in 
+
+> /examples/gaussian_xy_centric/PHITS_simulation_files
+
+This corresponds to the case (b) in the brightify paper.
+The other two forlders include other sample cases corresponding to the case (a) and case (c) in the same paper and if you want the MCPL files, you can drop me an email.
 
 ##  Citation
 
