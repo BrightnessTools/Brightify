@@ -1,0 +1,138 @@
+
+file=phits.in
+
+[ T i t l e ]
+untitled
+    
+
+[ P a r a m e t e r s ]
+   file(1) = /opt/PHITS/phits      # (D=/opt/PHITS/phits) PHITS install folder name
+   file(6) = phits.out       # (D=phits.out) general output file name
+   file(7) = /opt/PHITS/phits/data/xsdir.hns
+     icntl = 0              # (D=0) 3:ECH 5:NOR 6:SRC 7,8:GSH 11:DSH 12:DUMP
+    maxcas = 10000            # (D=10) number of particles per one batch
+    maxbch = 47               # (D=10) number of batches
+     MDBATIMA = 5000      
+     
+
+[ S o u r c e ]      
+    s-type = 13                     # Gaussian source
+      proj = neutron              # kind of incident particle         
+        x0 = 0.0
+        y0 = 0.0
+        r1 = 0.5
+        z0 = -0.05
+        z1 = 0.0
+       dir = all                      # isotropic
+        e0 = 25e-9
+
+[ M a t e r i a l ]
+M0101            01001      0.999999999  $ LIQUIDH2 @ 20 K
+                 01004      0.000000001  $ ro = 7.00E-02 g/cm3
+MT0101          PH-J33.20T
+                OH-J33.20T
+
+M3	  H 2.0	O 1.0	# Moderator
+MT3       h-h2o.40t 
+
+[ S u r f a c e ]
+    1              so             500.0           $ void
+   10              rpp            -3.0 3.0 0.0 3.0 0.0 3.0
+   20              rpp            -3.0 3.0 0.0 3.0 -3.0 3.0
+   25              rpp            -3.0 3.0 0.0 3.0 3.0 3.1
+   30              rpp            -0.5 0.5 -0.5 0.5 11.45 150.0
+   35              rpp            -1.44 1.44 -1.44 1.44 11.45 150.0
+
+
+
+[ C e l l ]
+    98            -1        1               $ Outer region
+   100             0                       -1  #104 #105
+   104             0                       -30
+   105            -1                       30 -35
+ 
+[ T - C r o s s ]
+    title = Energy distribution in xyz mesh
+     mesh =  xyz            # mesh type is xyz scoring mesh
+   x-type =    2            # x-mesh is linear given by xmin, xmax and nx
+     xmin =  -5.00000      # minimum value of x-mesh points
+     xmax =   5.00000      # maximum value of x-mesh points
+       nx =   1            # number of x-mesh points
+   y-type =    2            # y-mesh is linear given by ymin, ymax and ny
+     ymin =  -5.000000      # minimum value of y-mesh points
+     ymax =   5.000000      # maximum value of y-mesh points
+       ny =    1            # number of y-mesh points
+   z-type =    2            # z-mesh is linear given by zmin, zmax and nz
+     zmin =  0.5      # minimum value of z-mesh points
+     zmax =  1.0      # maximum value of z-mesh points
+       nz =   1            # number of z-mesh points
+   e-type =    2            # e-mesh is log given by emin, emax and ne
+     emin =   0.00      # minimum value of e-mesh points
+     emax =   2.0000      # maximum value of e-mesh points
+       ne =   1            # number of e-mesh points
+   a-type =    -2            # e-mesh is log given by emin, emax and ne
+     amin =   0.00      # minimum value of e-mesh points
+     amax =   2.5000      # maximum value of e-mesh points
+       na =   1            # number of e-mesh points
+     unit =    1            # unit is [1/cm^2/MeV/source]
+     axis =  xy            # axis of output
+     file = cross.out   # file name of output for the above axis
+   output = a-curr           # surface crossing flux
+     part =  neutron
+   epsout =    1            # (D=0) generate eps file by ANGEL
+
+[t-point]
+  title  = Example of Point Detector
+   point = 5
+  x   y    z  r0
+ 0.0   0.0   11.45  1
+ 0.0   0.0   22.9   1
+ 0.0   0.0   32.4   1
+ 0.0   0.0   92.0   1
+ 0.0   0.0   129.0  1
+ part = neutron
+ e-type = 1
+   ne   = 1
+          0.0    2.0
+
+ axis = eng
+ file = point-coll.out
+
+    
+[ T - T r a c k ]
+title = side view
+mesh = xyz
+           
+x-type = 2            
+xmin = -1.0
+xmax = 1.0
+nx = 1
+
+y-type = 2
+ymin = -6.0
+ymax = 6.0
+ny = 100
+   
+z-type = 2           
+zmin = -6.0
+zmax = 6.0
+nz = 100
+
+e-type = 2
+emin = 0
+emax = 2.0       
+ne = 1
+
+axis = yz  
+file = side_view.out     
+part = neutron        
+
+unit = 1            
+epsout = 1             
+gshow = 3
+
+resol = 1
+
+
+[ E n d ]
+    
