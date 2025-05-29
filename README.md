@@ -101,12 +101,12 @@ The other two forlders include other sample cases corresponding to the case (a) 
 
 ##  Citation
 
-The paper for brightify is currently submitted and is waiting for the decision. Meanwhile, if you use **Brightify** in your research, please cite the arxiv version (DOI will be announced in near future):
+The paper for brightify is currently submitted and is waiting for the decision. Meanwhile, if you use **Brightify** in your research, please cite the arxiv version:
 
 > M. Akhyani, L. Zanini, H. M. Ronnow  
 > **Brightify: A Tool for calculating brightness in neutron sources**.  
 > arxiv, 2025.  
-> DOI: 
+> https://arxiv.org/html/2505.22431v1
 
 
 ##  License
