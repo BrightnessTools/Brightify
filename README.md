@@ -52,10 +52,12 @@ A flowchart is available in the paper published on Brightify. You can find the d
 
 ## 📦 Installation
 
+Make sure you have installed and upgraded pip and git.
+It is recommended to install Brightify in a virtual environment to avoid conflict with other existing packages, projects, etc.
 Clone the repository and install Brightify:
 
-    git clone https://github.com/yourusername/brightify.git
-    cd brightify
+    git clone https://github.com/BrightnessTools/Brightify.git
+    cd Brightify
     pip install .
 Or manually install dependencies:
 
@@ -80,7 +82,7 @@ These are listed in `requirements.txt` for easy setup.
 
 ##  How to Use
 
-First step:
+First step is to import Brightify in your python environment:
 
     Import brightify 
 
