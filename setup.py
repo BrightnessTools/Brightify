@@ -5,7 +5,7 @@ setup(
     version='0.1.0',
     author='Mina Akhyani',
     description='A python package for brightness calculation based on MCPL files',
-    long_description=open('README.md').read(),
+    long_description=open('README.md', encoding='utf-8').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/BrightnessTools/Brightify',
     packages=find_packages(),
