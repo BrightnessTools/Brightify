@@ -45,7 +45,7 @@ Both methods demand **a priori** knowledge of where brightness is highest — a 
 
 ## 📥 Input & 📤 Output
 
-- **Input**: MCPL file with particle data (position, direction, energy, etc.), along with 6 other parameters defined by the user: type of the surface (flat, curved), type of the particle (neutron, proton, etc), number of scan points, position window size, direction window size and energy range.
+- **Input**: MCPL file with particle data (position, direction, energy, etc.), along with 6 other parameters defined by the user: type of the surface (flat, curved), type of the particle (neutron, proton, etc), number of scan points, position window size, direction window size and energy range. For creating MCPL files, you are invited to follow the instructions on the [`official MCPL webpage`](https://mctools.github.io/mcpl/hooks/).
 - **Output**: Brightness map with optimal position and direction for neutron guide placement.
 A flowchart is available in the paper published on Brightify. You can find the details in the citation section.
 
