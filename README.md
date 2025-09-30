@@ -103,12 +103,13 @@ The other two forlders include other sample cases corresponding to the case (a) 
 
 ##  Citation
 
-The paper for brightify is currently submitted and is waiting for the decision. Meanwhile, if you use **Brightify** in your research, please cite the arxiv version:
+If you use **Brightify** in your research, please cite the paper:
 
 > M. Akhyani, L. Zanini, H. M. Ronnow  
-> **Brightify: A Tool for calculating brightness in neutron sources**.  
-> arxiv, 2025.  
-> https://arxiv.org/html/2505.22431v1
+> **Brightify: A tool for calculating brightness in neutron sources**.  
+> Nuclear Instruments and Methods in Physics Research Section A: Accelerators, Spectrometers, Detectors and Associated Equipment,
+2025, 171037, ISSN 0168-9002.
+> https://doi.org/10.1016/j.nima.2025.17103
 
 
 ##  License
