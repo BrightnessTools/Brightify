@@ -123,7 +123,14 @@ This project is licensed under the **MIT License**. See LICENSE for details.
 
 ## 🤝 Contributing
 
-Contributions are welcome! If you find a bug or have a feature request, please open an issue or submit a pull request.
+We have a roadmap for Brightify improvement. If you are interested to contribute, you are very welcome to contact Mina Akhyani (m.akhyani@fz-juelich.de).
+
+The To-Do list is including but not restricted to:
+- Implementation of a module to handle low-statistic MCPL files
+- Automative workflow to choose the map resolution based on the user's input data
+- Parallelization or data chunking for huge MCPL files
+- Jupyter notebook for easy to start guide
+
 
 
 
