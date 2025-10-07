@@ -105,11 +105,14 @@ The other two forlders include other sample cases corresponding to the case (a) 
 
 If you use **Brightify** in your research, please cite the paper:
 
-> M. Akhyani, L. Zanini, H. M. Ronnow  
-> **Brightify: A tool for calculating brightness in neutron sources**.  
+> Mina Akhyani, Luca Zanini, Henrik M. Rønnow
+> 
+> **Brightify: a tool for calculating directionally-resolved brightness in neutron sources**.
+> 
 > Nuclear Instruments and Methods in Physics Research Section A: Accelerators, Spectrometers, Detectors and Associated Equipment,
-2025, 171037, ISSN 0168-9002.
-> https://doi.org/10.1016/j.nima.2025.17103
+Volume 1082, Part 2, 2026, 171037, ISSN 0168-9002.
+> 
+> https://doi.org/10.1016/j.nima.2025.171037
 
 
 ##  License
@@ -127,4 +130,4 @@ Contributions are welcome! If you find a bug or have a feature request, please o
 ##  Acknowledgments
 
 Developed as part of research at Laboratory of Qauntum Magnetism (LQM), EPFL, Lausanne, Switzerland.  
-Supported by the **European Union’s Horizon 2020** research and innovation programme under the **Marie Skłodowska-Curie grant** agreement No. 754354.
+Supported by the **European Union’s Horizon 2020** research and innovation programme under the **Marie Skłodowska-Curie grant** agreement No. 754354 and No. 101034266.
