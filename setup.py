@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='Brightify',
-    version='0.1.0',
+    version='1.0.0',
     author='Mina Akhyani',
     description='A python package for brightness calculation based on MCPL files',
     long_description=open('README.md', encoding='utf-8').read(),
@@ -23,3 +23,4 @@ setup(
     ],
     python_requires='>=3.6',
 )
+
