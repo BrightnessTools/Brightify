@@ -9,7 +9,8 @@ flatModel = Flat(
     inputFile= path +'output.mcpl.gz',
     primary_protons =   47000000,
     pCurrent = 1.0,
-    pos_size = 1.0,
+    pos_size_x = 1.0,
+    pos_size_y = 1.0,
     dir_size = 6e-3
     )
 
