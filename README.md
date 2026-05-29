@@ -101,6 +101,10 @@ If you do simulations with PHITS, the PHITS input file for creating of this MCPL
 This corresponds to the case (b) in the brightify paper.
 The other two forlders include other sample cases corresponding to the case (a) and case (c) in the same paper and if you want the MCPL files, you can drop me an email.
 
+## Attention!
+
+Brightify would assume by default that the input MCPL file is in XY plane (Z is the normal to the MCPL surface).
+
 ##  Citation
 
 If you use **Brightify** in your research, please cite the paper:
