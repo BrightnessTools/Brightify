@@ -84,7 +84,9 @@ These are listed in `requirements.txt` for easy setup.
 
 First step is to import Brightify in your python environment:
 
-    Import brightify 
+```python
+import Brightify 
+```
 
 An example of usage is detailed in
 
@@ -92,7 +94,7 @@ An example of usage is detailed in
 
 For running this example, you will need an MCPL file which you can download from below:
 
-> https://zenodo.org/records/15537265?token=eyJhbGciOiJIUzUxMiJ9.eyJpZCI6ImZiMDZkM2M5LTdhNjEtNDc3Mi1iNGZhLWU3MTAzNzMxNTBkMSIsImRhdGEiOnt9LCJyYW5kb20iOiIyZGZjNzk1ZjczYTZkODkwNWVkZjc2MWJlMDdjNzdiMiJ9.1wo5IMfgg7P7pZ0UNy04Z-d89Mu02v4Ma-qtA_R4K_8M2b9ZiyuUwFBaFsgy03gH-Xy1qHkP155rpdpR3wbqkQ
+> [Zenodo link for example daa](https://zenodo.org/records/15537265?token=eyJhbGciOiJIUzUxMiJ9.eyJpZCI6ImZiMDZkM2M5LTdhNjEtNDc3Mi1iNGZhLWU3MTAzNzMxNTBkMSIsImRhdGEiOnt9LCJyYW5kb20iOiIyZGZjNzk1ZjczYTZkODkwNWVkZjc2MWJlMDdjNzdiMiJ9.1wo5IMfgg7P7pZ0UNy04Z-d89Mu02v4Ma-qtA_R4K_8M2b9ZiyuUwFBaFsgy03gH-Xy1qHkP155rpdpR3wbqkQ)
 
 If you do simulations with PHITS, the PHITS input file for creating of this MCPL file is included in 
 
