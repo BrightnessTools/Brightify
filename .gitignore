@@ -175,3 +175,7 @@ cython_debug/
 
 # VS Code
 .vscode/
+
+# (Compressed) MCPL Data files
+.mcpl.gz
+.mcpl
