@@ -92,6 +92,10 @@ An example of usage is detailed in
 
 > /examples/verification.py
 
+A granular, runnable introduction to downloading the sample MCPL data and generating brightness maps is available in
+
+> [examples/brightify_introduction.ipynb](examples/brightify_introduction.ipynb)
+
 For running this example, you will need an MCPL file which you can download from below:
 
 > [Zenodo link for example data](https://zenodo.org/records/15537265?token=eyJhbGciOiJIUzUxMiJ9.eyJpZCI6ImZiMDZkM2M5LTdhNjEtNDc3Mi1iNGZhLWU3MTAzNzMxNTBkMSIsImRhdGEiOnt9LCJyYW5kb20iOiIyZGZjNzk1ZjczYTZkODkwNWVkZjc2MWJlMDdjNzdiMiJ9.1wo5IMfgg7P7pZ0UNy04Z-d89Mu02v4Ma-qtA_R4K_8M2b9ZiyuUwFBaFsgy03gH-Xy1qHkP155rpdpR3wbqkQ)
@@ -135,7 +139,6 @@ The To-Do list is including but not restricted to:
 - Implementation of a module to handle low-statistic MCPL files
 - Automative workflow to choose the map resolution based on the user's input data
 - Parallelization or data chunking for huge MCPL files
-- Jupyter notebook for easy to start guide
 
 
 
