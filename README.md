@@ -85,7 +85,7 @@ These are listed in `requirements.txt` for easy setup.
 First step is to import Brightify in your python environment:
 
 ```python
-import Brightify 
+import brightify 
 ```
 
 An example of usage is detailed in
