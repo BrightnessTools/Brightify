@@ -419,9 +419,15 @@ class Spherical(BrightifyModel):
     def plot(self):
         """
         Plots a 3D brightness map of the spherical shell.
+
+        Returns
+        -------
+        fig, ax
+            The Matplotlib figure and 3D axes for further customization.
         """
-        
-        ax = plt.figure().add_subplot(111, projection='3d')
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
         sc = ax.scatter(
             self.spiral[:,2], self.spiral[:,1], self.spiral[:,0],
             c=self.brightness, cmap=plt.cm.magma, vmin=0 #c=self.window_weights
@@ -439,7 +445,8 @@ class Spherical(BrightifyModel):
             self.mean_directions_window[:,0],
             length=0.0001
             )
-        plt.colorbar(sc, ax=ax)
+        fig.colorbar(sc, ax=ax)
+        return fig, ax
 
 
     def save(self, outputFile):
@@ -738,7 +745,7 @@ class Flat(BrightifyModel):
         cbar = fig.colorbar(mesh, ax=ax)
         cbar.ax.tick_params(labelsize=18)
         cbar.ax.set_ylabel(colorbar_label, fontsize=18)
-        plt.show()
+        return fig, ax
 
     def plot_brightness_map(self, method=None, show_arrows=True,
                             figsize=(10, 8), square_axes=True,
@@ -751,11 +758,16 @@ class Flat(BrightifyModel):
         Set ``square_axes=False`` to preserve equal physical x/y scaling.
         ``arrow_scale`` multiplies arrow length; larger values make the arrows
         longer. Its default is ``1.0``.
+
+        Returns
+        -------
+        fig, ax
+            The Matplotlib figure and axes for further customization.
         """
-        self._plot_flat_map(self.brightness,
-                            'brightness [n/s/cm$^2$/sr]',
-                            method, show_arrows, figsize, square_axes,
-                            arrow_scale)
+        return self._plot_flat_map(self.brightness,
+                                   'brightness [n/s/cm$^2$/sr]',
+                                   method, show_arrows, figsize, square_axes,
+                                   arrow_scale)
 
     def plot_error_map(self, method=None, show_arrows=True, figsize=(10, 8),
                        square_axes=True, arrow_scale=1.0):
@@ -765,10 +777,15 @@ class Flat(BrightifyModel):
         Set ``square_axes=False`` to preserve equal physical x/y scaling.
         ``arrow_scale`` multiplies arrow length; larger values make the arrows
         longer. Its default is ``1.0``.
+
+        Returns
+        -------
+        fig, ax
+            The Matplotlib figure and axes for further customization.
         """
-        self._plot_flat_map(self.relative_error, 'relative error',
-                            method, show_arrows, figsize, square_axes,
-                            arrow_scale)
+        return self._plot_flat_map(self.relative_error, 'relative error',
+                                   method, show_arrows, figsize, square_axes,
+                                   arrow_scale)
      
     def surface_crossing(self, v_x, v_y, v_z, theta_D):
         """
