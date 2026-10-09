@@ -18,6 +18,8 @@ class FlatPlottingTest(unittest.TestCase):
         self.model.x_mesh, self.model.y_mesh = np.meshgrid(
             self.model.x_range, self.model.y_range
         )
+        self.model.x_min, self.model.x_max = 0.25, 1.75
+        self.model.y_min, self.model.y_max = 10.25, 11.75
         self.model.dir_size = 1.0
         self.model.pCurrent = 2.0
         self.model.primary_protons = 4.0
@@ -47,7 +49,28 @@ class FlatPlottingTest(unittest.TestCase):
                 self.assertEqual(arrows.pivot, "middle")
                 self.assertTrue(np.all(np.sign(arrows.U) == expected_x_sign))
                 self.assertTrue(np.all(arrows.V > 0))
+                np.testing.assert_allclose(axes.get_xlim(), [0.25, 1.75])
+                np.testing.assert_allclose(axes.get_ylim(), [10.25, 11.75])
                 plt.close("all")
+
+    @patch("matplotlib.pyplot.show")
+    def test_custom_figure_size(self, _):
+        self.model.plot_brightness_map(method="mean", show_arrows=False,
+                                       figsize=(7, 5))
+        np.testing.assert_allclose(plt.gcf().get_size_inches(), [7, 5])
+
+    @patch("matplotlib.pyplot.show")
+    def test_square_axes_are_default_and_can_be_disabled(self, _):
+        self.model.x_max = 10.0
+        self.model.plot_brightness_map(method="mean", show_arrows=False)
+        axes = plt.gcf().axes[0]
+        self.assertEqual(axes.get_box_aspect(), 1.0)
+
+        plt.close("all")
+        self.model.plot_brightness_map(method="mean", show_arrows=False,
+                                       square_axes=False)
+        axes = plt.gcf().axes[0]
+        self.assertEqual(axes.get_aspect(), 1.0)
 
     @patch("matplotlib.pyplot.show")
     def test_adaptive_error_map_displays_computed_errors(self, _):

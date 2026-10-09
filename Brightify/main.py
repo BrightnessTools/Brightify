@@ -562,7 +562,8 @@ class Flat(BrightifyModel):
     def save(self, outputFile, method="adaptive"):
         common_keys = (
             'inputFile', 'primary_protons', 'pCurrent', 'pos_size', 'dir_size',
-            'particle', 'energy', 'dir_window', 'x_range', 'y_range',
+            'particle', 'energy', 'dir_window', 'x_min', 'x_max', 'y_min',
+            'y_max', 'x_range', 'y_range',
             'x_mesh', 'y_mesh', 'z_mesh', 'total_neutrons', 'total_weights',
             'window_weights', 'total_mean', 'relative_error'
             )
@@ -646,7 +647,8 @@ class Flat(BrightifyModel):
             raise ValueError(f"Unknown plotting method: {method}")
         return method, np.asarray(directions, dtype=float)
 
-    def _plot_flat_map(self, values, colorbar_label, method, show_arrows):
+    def _plot_flat_map(self, values, colorbar_label, method, show_arrows,
+                       figsize, square_axes):
         """Plot flat-mesh values and projected directions on the same grid."""
         _, directions = self._plot_method(method)
         shape = (len(self.y_range), len(self.x_range))
@@ -661,10 +663,32 @@ class Flat(BrightifyModel):
         x_edges = self._centers_to_edges(self.x_range, self.pos_size_x / 4)
         y_edges = self._centers_to_edges(self.y_range, self.pos_size_y / 4)
 
-        fig, ax = plt.subplots(figsize=(16, 12))
+        fig, ax = plt.subplots(figsize=figsize)
         mesh = ax.pcolormesh(x_edges, y_edges, values, cmap=plt.cm.viridis,
                              shading="flat")
-        ax.set_aspect("equal")
+        if square_axes:
+            # Fill a square plotting box even when the x and y ranges differ
+            # substantially.  This makes long, narrow surfaces easier to read.
+            ax.set_aspect("auto")
+            ax.set_box_aspect(1)
+        else:
+            # Preserve equal physical scale in x and y.  The axes box will then
+            # follow the aspect ratio of the filtered data.
+            ax.set_aspect("equal")
+
+        # prepare_vectors stores the bounds of the filtered particle data.
+        # The regular calculation grid can extend beyond those bounds, so crop
+        # the axes to the actual data instead of displaying empty edge cells.
+        x_limits = (getattr(self, "x_min", self.x_range[0]),
+                    getattr(self, "x_max", self.x_range[-1]))
+        y_limits = (getattr(self, "y_min", self.y_range[0]),
+                    getattr(self, "y_max", self.y_range[-1]))
+        plot_x_limits = (x_limits if x_limits[0] < x_limits[1]
+                         else (x_edges[0], x_edges[-1]))
+        plot_y_limits = (y_limits if y_limits[0] < y_limits[1]
+                         else (y_edges[0], y_edges[-1]))
+        ax.set_xlim(plot_x_limits)
+        ax.set_ylim(plot_y_limits)
 
         if show_arrows:
             centers = np.column_stack((self.x_mesh.ravel(),
@@ -676,15 +700,29 @@ class Flat(BrightifyModel):
                 # Normalize the in-plane projection because the arrows encode
                 # direction, not magnitude.  A common data-unit scale preserves
                 # their angles and keeps them within their heat-map cells.
-                cell_size = min(np.min(np.diff(x_edges)),
-                                np.min(np.diff(y_edges)))
                 arrow_vectors = (projected[visible]
-                                 / projected_norm[visible, np.newaxis]
-                                 * 0.7 * cell_size)
+                                 / projected_norm[visible, np.newaxis])
+                if square_axes:
+                    # In a stretched data coordinate system, screen-space
+                    # angles keep the displayed arrows faithful to the x/y
+                    # direction components.  Size them relative to the
+                    # narrowest displayed grid-cell dimension.
+                    x_fraction = (np.min(np.diff(x_edges))
+                                  / np.diff(plot_x_limits)[0])
+                    y_fraction = (np.min(np.diff(y_edges))
+                                  / np.diff(plot_y_limits)[0])
+                    arrow_fraction = 0.7 * min(x_fraction, y_fraction)
+                    quiver_options = dict(angles="uv", scale_units="width",
+                                          scale=1 / arrow_fraction)
+                else:
+                    cell_size = min(np.min(np.diff(x_edges)),
+                                    np.min(np.diff(y_edges)))
+                    arrow_vectors *= 0.7 * cell_size
+                    quiver_options = dict(angles="xy", scale_units="xy",
+                                          scale=1)
                 ax.quiver(centers[visible, 0], centers[visible, 1],
                           arrow_vectors[:, 0], arrow_vectors[:, 1],
-                          angles="xy", scale_units="xy", scale=1,
-                          pivot="middle", color="blue")
+                          pivot="middle", color="blue", **quiver_options)
 
         ax.set_xlabel('x [cm]', fontsize=18)
         ax.set_ylabel('y [cm]', fontsize=18)
@@ -694,20 +732,28 @@ class Flat(BrightifyModel):
         cbar.ax.set_ylabel(colorbar_label, fontsize=18)
         plt.show()
 
-    def plot_brightness_map(self, method=None, show_arrows=True):
+    def plot_brightness_map(self, method=None, show_arrows=True,
+                            figsize=(10, 8), square_axes=True):
         """Plot brightness and its maximizing direction at each mesh point.
 
         ``method`` can be ``"mean"``, ``"adaptive"``, ``"normal"``, or
         ``None`` to use the method from the latest calculation.
+        ``figsize`` is the Matplotlib figure size in inches.
+        Set ``square_axes=False`` to preserve equal physical x/y scaling.
         """
         self._plot_flat_map(self.brightness,
                             'brightness [n/s/cm$^2$/sr]',
-                            method, show_arrows)
+                            method, show_arrows, figsize, square_axes)
 
-    def plot_error_map(self, method=None, show_arrows=True):
-        """Plot relative error and the selected direction at each mesh point."""
+    def plot_error_map(self, method=None, show_arrows=True, figsize=(10, 8),
+                       square_axes=True):
+        """Plot relative error and the selected direction at each mesh point.
+
+        ``figsize`` is the Matplotlib figure size in inches.
+        Set ``square_axes=False`` to preserve equal physical x/y scaling.
+        """
         self._plot_flat_map(self.relative_error, 'relative error',
-                            method, show_arrows)
+                            method, show_arrows, figsize, square_axes)
      
     def surface_crossing(self, v_x, v_y, v_z, theta_D):
         """
