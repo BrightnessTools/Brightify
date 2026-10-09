@@ -73,6 +73,23 @@ class FlatPlottingTest(unittest.TestCase):
         self.assertEqual(axes.get_aspect(), 1.0)
 
     @patch("matplotlib.pyplot.show")
+    def test_arrow_scale_controls_length(self, _):
+        self.model.plot_brightness_map(method="mean", arrow_scale=1.0)
+        default_arrows = plt.gcf().axes[0].collections[1]
+        default_scale = default_arrows.scale
+
+        plt.close("all")
+        self.model.plot_brightness_map(method="mean", arrow_scale=2.0)
+        larger_arrows = plt.gcf().axes[0].collections[1]
+        self.assertAlmostEqual(larger_arrows.scale, default_scale / 2)
+        self.assertEqual(larger_arrows.width, 0.005)
+
+    @patch("matplotlib.pyplot.show")
+    def test_arrow_scale_must_be_positive(self, _):
+        with self.assertRaisesRegex(ValueError, "arrow_scale"):
+            self.model.plot_brightness_map(method="mean", arrow_scale=0)
+
+    @patch("matplotlib.pyplot.show")
     def test_adaptive_error_map_displays_computed_errors(self, _):
         self.model.plot_error_map(method="adaptive", show_arrows=False)
         plotted = np.asarray(plt.gcf().axes[0].collections[0].get_array())

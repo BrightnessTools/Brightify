@@ -648,8 +648,13 @@ class Flat(BrightifyModel):
         return method, np.asarray(directions, dtype=float)
 
     def _plot_flat_map(self, values, colorbar_label, method, show_arrows,
-                       figsize, square_axes):
+                       figsize, square_axes, arrow_scale):
         """Plot flat-mesh values and projected directions on the same grid."""
+        if not np.isscalar(arrow_scale) or not np.isfinite(arrow_scale):
+            raise ValueError("arrow_scale must be a finite positive number")
+        if arrow_scale <= 0:
+            raise ValueError("arrow_scale must be a finite positive number")
+
         _, directions = self._plot_method(method)
         shape = (len(self.y_range), len(self.x_range))
         values = np.asarray(values).reshape(shape)
@@ -711,18 +716,21 @@ class Flat(BrightifyModel):
                                   / np.diff(plot_x_limits)[0])
                     y_fraction = (np.min(np.diff(y_edges))
                                   / np.diff(plot_y_limits)[0])
-                    arrow_fraction = 0.7 * min(x_fraction, y_fraction)
+                    arrow_fraction = (0.9 * arrow_scale
+                                      * min(x_fraction, y_fraction))
                     quiver_options = dict(angles="uv", scale_units="width",
                                           scale=1 / arrow_fraction)
                 else:
                     cell_size = min(np.min(np.diff(x_edges)),
                                     np.min(np.diff(y_edges)))
-                    arrow_vectors *= 0.7 * cell_size
+                    arrow_vectors *= 0.9 * arrow_scale * cell_size
                     quiver_options = dict(angles="xy", scale_units="xy",
                                           scale=1)
                 ax.quiver(centers[visible, 0], centers[visible, 1],
                           arrow_vectors[:, 0], arrow_vectors[:, 1],
-                          pivot="middle", color="blue", **quiver_options)
+                          pivot="middle", color="blue", width=0.005,
+                          headwidth=4, headlength=5, headaxislength=4.5,
+                          **quiver_options)
 
         ax.set_xlabel('x [cm]', fontsize=18)
         ax.set_ylabel('y [cm]', fontsize=18)
@@ -733,27 +741,34 @@ class Flat(BrightifyModel):
         plt.show()
 
     def plot_brightness_map(self, method=None, show_arrows=True,
-                            figsize=(10, 8), square_axes=True):
+                            figsize=(10, 8), square_axes=True,
+                            arrow_scale=1.0):
         """Plot brightness and its maximizing direction at each mesh point.
 
         ``method`` can be ``"mean"``, ``"adaptive"``, ``"normal"``, or
         ``None`` to use the method from the latest calculation.
         ``figsize`` is the Matplotlib figure size in inches.
         Set ``square_axes=False`` to preserve equal physical x/y scaling.
+        ``arrow_scale`` multiplies arrow length; larger values make the arrows
+        longer. Its default is ``1.0``.
         """
         self._plot_flat_map(self.brightness,
                             'brightness [n/s/cm$^2$/sr]',
-                            method, show_arrows, figsize, square_axes)
+                            method, show_arrows, figsize, square_axes,
+                            arrow_scale)
 
     def plot_error_map(self, method=None, show_arrows=True, figsize=(10, 8),
-                       square_axes=True):
+                       square_axes=True, arrow_scale=1.0):
         """Plot relative error and the selected direction at each mesh point.
 
         ``figsize`` is the Matplotlib figure size in inches.
         Set ``square_axes=False`` to preserve equal physical x/y scaling.
+        ``arrow_scale`` multiplies arrow length; larger values make the arrows
+        longer. Its default is ``1.0``.
         """
         self._plot_flat_map(self.relative_error, 'relative error',
-                            method, show_arrows, figsize, square_axes)
+                            method, show_arrows, figsize, square_axes,
+                            arrow_scale)
      
     def surface_crossing(self, v_x, v_y, v_z, theta_D):
         """
