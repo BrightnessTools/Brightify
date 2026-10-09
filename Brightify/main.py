@@ -512,19 +512,20 @@ class Flat(BrightifyModel):
     def flat_filter_func(self, data_filt, vec):
         return data_filt[(data_filt['x'] >= vec[0] - self.pos_size_x/2) & 
                          (data_filt['x'] <  vec[0] + self.pos_size_x/2) & 
-                         (data_filt['y'] >= vec[1] - self.pos_size_y/2) & 
+                         (data_filt['y'] >= vec[1] - self.pos_size_y/2) &
                          (data_filt['y'] <  vec[1] + self.pos_size_y/2)]
 
     #------------------ Unified calculation -----------------------#
     def calculate(self, method="adaptive", bins_cart=35, threshold_frac=0.98):
         """
         Calculate brightness and relative error on the mesh.
-        
+
         method: "mean", "adaptive", or "normal"
         """
         data_filt = self.data_filter
         self.dir_window = 1 - self.dir_size / (2 * np.pi)
         self.prepare_vectors()
+        self.calculation_method = method
 
         if method == "mean":
             return self.calculate_properties(
@@ -596,133 +597,117 @@ class Flat(BrightifyModel):
         return self
 
     #------------------ Unified plotting ------------------#
-    def plot_brightness_map(self, method=None, show_arrows=True):
-        """
-        Plot brightness map with optional auto-detection of method
-        and arrows for direction vectors.
-    
-        method: "mean", "adaptive", "normal", or None (auto-detect)
-        show_arrows: whether to draw direction arrows
-        """
-    
-        # Ensure bounds exist
-        if not hasattr(self, "x_min") or not hasattr(self, "x_max"):
-            self.x_min, self.x_max = self.x_range.min(), self.x_range.max()
-            self.y_min, self.y_max = self.y_range.min(), self.y_range.max()
-    
-        # Auto-detect method if not provided
+    @staticmethod
+    def _centers_to_edges(centers, fallback_width):
+        """Return cell edges whose midpoints are the supplied grid centers."""
+        centers = np.asarray(centers, dtype=float)
+        if centers.ndim != 1 or centers.size == 0:
+            raise ValueError("Plot coordinates must be a non-empty 1D array")
+        if centers.size == 1:
+            half_width = fallback_width / 2
+            return np.array([centers[0] - half_width,
+                             centers[0] + half_width])
+
+        differences = np.diff(centers)
+        if np.any(differences <= 0):
+            raise ValueError("Plot coordinates must be strictly increasing")
+        midpoints = centers[:-1] + differences / 2
+        return np.concatenate(([centers[0] - differences[0] / 2],
+                               midpoints,
+                               [centers[-1] + differences[-1] / 2]))
+
+    def _plot_method(self, method):
+        """Resolve the calculation method and its brightness direction."""
         if method is None:
+            method = getattr(self, "calculation_method", None)
+        if method is None:
+            # Compatibility with result files written before calculation_method
+            # was stored.
             if hasattr(self, "adaptive_dir"):
                 method = "adaptive"
             elif hasattr(self, "mean_directions"):
                 method = "mean"
             else:
                 method = "normal"
-    
-        # Select data
-        if method == "mean":
-            brightness_map = self.brightness.reshape(len(self.y_range),
-                                                     len(self.x_range))
-            directions = self.mean_directions
-            directions_spher = self.mean_directions_spher
-    
-        elif method == "adaptive":
-            brightness_map = self.window_weights.reshape(len(self.y_range),
-                                                         len(self.x_range))
+
+        if method == "adaptive":
+            if not hasattr(self, "adaptive_dir"):
+                raise ValueError("Adaptive directions are not available; run "
+                                 "calculate(method='adaptive') first")
             directions = self.adaptive_dir
-            directions_spher = self.adaptive_dir_spher
-    
+        elif method == "mean":
+            if not hasattr(self, "mean_directions"):
+                raise ValueError("Mean directions are not available; run "
+                                 "calculate(method='mean') first")
+            directions = self.mean_directions
         elif method == "normal":
-            brightness_map = self.window_weights.reshape(len(self.y_range),
-                                                         len(self.x_range))
-            directions = np.tile(np.array([[0, 0, 1]]), (self.x_mesh.size, 1))
-            directions_spher = np.stack((np.zeros(len(directions)),
-                                         np.zeros(len(directions))), axis=1)
+            directions = np.tile((0.0, 0.0, 1.0), (self.x_mesh.size, 1))
         else:
             raise ValueError(f"Unknown plotting method: {method}")
-    
-        circle_centers = np.stack((self.x_mesh.flatten(), self.y_mesh.flatten()), axis=-1)
-        circle_radii = np.sin(directions_spher[:, 1])
-    
+        return method, np.asarray(directions, dtype=float)
+
+    def _plot_flat_map(self, values, colorbar_label, method, show_arrows):
+        """Plot flat-mesh values and projected directions on the same grid."""
+        _, directions = self._plot_method(method)
+        shape = (len(self.y_range), len(self.x_range))
+        values = np.asarray(values).reshape(shape)
+        if directions.shape != (values.size, 3):
+            raise ValueError("Direction and map grids have different sizes")
+
+        # x_range/y_range are sample centers.  Supplying their extrema to
+        # imshow as an extent treats those centers as outer edges and shifts
+        # every heat-map cell away from its direction arrow.  Explicit edges
+        # also keep non-uniform and one-cell grids aligned correctly.
+        x_edges = self._centers_to_edges(self.x_range, self.pos_size_x / 4)
+        y_edges = self._centers_to_edges(self.y_range, self.pos_size_y / 4)
+
         fig, ax = plt.subplots(figsize=(16, 12))
-        im = ax.imshow(brightness_map, cmap=plt.cm.viridis, origin='lower',
-                       extent=[self.x_min, self.x_max, self.y_min, self.y_max])
-    
+        mesh = ax.pcolormesh(x_edges, y_edges, values, cmap=plt.cm.viridis,
+                             shading="flat")
+        ax.set_aspect("equal")
+
         if show_arrows:
-            for center, radius, vector in zip(circle_centers, circle_radii, directions):
-                ax.arrow(center[0], center[1], radius * vector[0], radius * vector[1],
-                         head_width=0.1, head_length=0.2, fc='blue', ec='blue')
-    
+            centers = np.column_stack((self.x_mesh.ravel(),
+                                       self.y_mesh.ravel()))
+            projected = directions[:, :2]
+            projected_norm = np.linalg.norm(projected, axis=1)
+            visible = np.isfinite(projected).all(axis=1) & (projected_norm > 0)
+            if np.any(visible):
+                # Normalize the in-plane projection because the arrows encode
+                # direction, not magnitude.  A common data-unit scale preserves
+                # their angles and keeps them within their heat-map cells.
+                cell_size = min(np.min(np.diff(x_edges)),
+                                np.min(np.diff(y_edges)))
+                arrow_vectors = (projected[visible]
+                                 / projected_norm[visible, np.newaxis]
+                                 * 0.7 * cell_size)
+                ax.quiver(centers[visible, 0], centers[visible, 1],
+                          arrow_vectors[:, 0], arrow_vectors[:, 1],
+                          angles="xy", scale_units="xy", scale=1,
+                          pivot="middle", color="blue")
+
         ax.set_xlabel('x [cm]', fontsize=18)
         ax.set_ylabel('y [cm]', fontsize=18)
         ax.tick_params(axis='both', which='major', labelsize=18)
-        cbar = plt.colorbar(im, label='brightness')
+        cbar = fig.colorbar(mesh, ax=ax)
         cbar.ax.tick_params(labelsize=18)
-        cbar.ax.set_ylabel('brightness [n/s/cm$^2$/sr]', fontsize=18)
+        cbar.ax.set_ylabel(colorbar_label, fontsize=18)
         plt.show()
 
+    def plot_brightness_map(self, method=None, show_arrows=True):
+        """Plot brightness and its maximizing direction at each mesh point.
+
+        ``method`` can be ``"mean"``, ``"adaptive"``, ``"normal"``, or
+        ``None`` to use the method from the latest calculation.
+        """
+        self._plot_flat_map(self.brightness,
+                            'brightness [n/s/cm$^2$/sr]',
+                            method, show_arrows)
+
     def plot_error_map(self, method=None, show_arrows=True):
-        """
-        Plot relative error map with optional auto-detection of method
-        and arrows for direction vectors.
-        """
-    
-        # Ensure bounds exist
-        if not hasattr(self, "x_min") or not hasattr(self, "x_max"):
-            self.x_min, self.x_max = self.x_range.min(), self.x_range.max()
-            self.y_min, self.y_max = self.y_range.min(), self.y_range.max()
-    
-        # Auto-detect method if not provided
-        if method is None:
-            if hasattr(self, "adaptive_dir"):
-                method = "adaptive"
-            elif hasattr(self, "mean_directions"):
-                method = "mean"
-            else:
-                method = "normal"
-    
-        # Select data
-        if method == "mean":
-            error_map = self.relative_error.reshape(len(self.y_range),
-                                                    len(self.x_range))
-            directions = self.mean_directions
-            directions_spher = self.mean_directions_spher
-    
-        elif method == "adaptive":
-            error_map = np.full_like(self.window_weights, np.nan).reshape(
-                len(self.y_range), len(self.x_range)
-            )
-            directions = self.adaptive_dir
-            directions_spher = self.adaptive_dir_spher
-    
-        elif method == "normal":
-            error_map = self.relative_error.reshape(len(self.y_range),
-                                                    len(self.x_range))
-            directions = np.tile(np.array([[0, 0, 1]]), (self.x_mesh.size, 1))
-            directions_spher = np.stack((np.zeros(len(directions)),
-                                         np.zeros(len(directions))), axis=1)
-        else:
-            raise ValueError(f"Unknown plotting method: {method}")
-    
-        circle_centers = np.stack((self.x_mesh.flatten(), self.y_mesh.flatten()), axis=-1)
-        circle_radii = np.sin(directions_spher[:, 1])
-    
-        fig, ax = plt.subplots(figsize=(16, 12))
-        im = ax.imshow(error_map, cmap=plt.cm.viridis, origin='lower',
-                       extent=[self.x_min, self.x_max, self.y_min, self.y_max])
-    
-        if show_arrows:
-            for center, radius, vector in zip(circle_centers, circle_radii, directions):
-                ax.arrow(center[0], center[1], radius * vector[0], radius * vector[1],
-                         head_width=0.1, head_length=0.2, fc='blue', ec='blue')
-    
-        ax.set_xlabel('x [cm]', fontsize=18)
-        ax.set_ylabel('y [cm]', fontsize=18)
-        ax.tick_params(axis='both', which='major', labelsize=18)
-        cbar = plt.colorbar(im, label='relative error')
-        cbar.ax.tick_params(labelsize=18)
-        cbar.ax.set_ylabel('relative error', fontsize=18)
-        plt.show()
+        """Plot relative error and the selected direction at each mesh point."""
+        self._plot_flat_map(self.relative_error, 'relative error',
+                            method, show_arrows)
      
     def surface_crossing(self, v_x, v_y, v_z, theta_D):
         """
