@@ -4,14 +4,14 @@
 #%%
 import pandas as pd
 import numpy as np
-from os import path
+from pathlib import Path
 from io import StringIO
 import pickle as pkl
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import mcpl
-from brightify import fast_computation as fc
 
+from brightify import fast_computation as fc
 
 #%% Define particle types with their corresponding PDG codes
 PDG_CODES = {
@@ -39,6 +39,105 @@ VELOCITY_NAMES_XYZ = [VELOCITY_NAME_X, VELOCITY_NAME_Y, VELOCITY_NAME_Z] # Veloc
 # WEIGHTED_VELOCITY_NAMES = ['Vxw', 'Vyw', 'Vzw']  # Weighted velocity components
 # MEAN_POSITION_NAMES = ['Xm', 'Ym', 'Zm']  # Mean position components
 # MEAN_VELOCITY_NAMES = ['Vxm', 'Vym', 'Vzm']  # Mean velocity components
+
+def read_data(inputFile, input_is_ascii=False):
+    """
+    Reads data from mcpl / mcpl.gz file and returns it as pandas dataframe.
+    Optionally from ascii file.
+    """
+    data = None
+    if input_is_ascii:
+        try:
+            with open(inputFile, 'r') as f:
+                data = f.read().replace('D', 'E')
+            data = pd.read_csv(
+                StringIO(data), header=None, delim_whitespace=True, 
+                names=(PDG_CODE_NAME, POSITION_NAME_X, POSITION_NAME_Y, POSITION_NAME_Z,
+                    VELOCITY_NAME_X, VELOCITY_NAME_Y, VELOCITY_NAME_Z, ENERGY_NAME, WEIGHT_NAME,
+                    'time', 'c1', 'c2', 'c3', 'name', 'nocas', 'nobch', 'no')
+                )
+        except Exception:
+            print("input could not be read")
+    elif inputFile.name.endswith(".mcpl") or inputFile.name.endswith(".mcpl.gz"):
+        # Read the MCPL file (format used for Brightify input files)
+        try:
+            myfile=mcpl.MCPLFile(str(inputFile),blocklength=1e13) # the blocklength is so high, it will almost always load the entire file
+        except Exception:
+            print("input could not be read")
+        # Loop through each particle block in the MCPL file and store data
+        # in a list of pandas DataFrames, and then combine all into one dataframe.
+        data_frames = []
+        for p in myfile.particle_blocks: # since we have a loop over the blocks, shouldn't each block's data be appended to self.data, instead of overwriting it each time?
+            df = pd.DataFrame({
+                PDG_CODE_NAME: p.pdgcode,  # Particle PDG code
+                POSITION_NAME_X: p.x,  # x-position
+                POSITION_NAME_Y: p.y,  # y-position
+                POSITION_NAME_Z: p.z,  # z-position
+                VELOCITY_NAME_X: p.ux,  # Velocity in x-direction
+                VELOCITY_NAME_Y: p.uy,  # Velocity in y-direction
+                VELOCITY_NAME_Z: p.uz,  # Velocity in z-direction
+                ENERGY_NAME: p.ekin,  # Kinetic energy
+                WEIGHT_NAME: p.weight  # Weight of the particle
+            })
+            data_frames.append(df)
+        data = pd.concat(data_frames, ignore_index=True)
+    else: raise ValueError("input could not be interpreted") 
+    return data  
+
+def read_model(dumpFile):
+    """
+    Reads previously saved model and returns a dictionary with attributes.
+    dumpFile is expected to be pickle dump of a dictionary with the model's attributes.
+    """
+    dumpFile = Path(dumpFile)
+    # this reads a previous dump of a model and returns the dictionary (does not change self object, and doesn't need it at all because it is static method)
+    print("previous Brightify model dump file is being read")
+    try:
+        with open(dumpFile, "rb") as f:
+            dataDict = pkl.load(f)
+    except Exception:
+        print("could not load file")
+    return dataDict
+
+def save_model(model, dumpFile):
+    """
+    Saves attributes of the model to dumpFile in the form of a dictionary in a pickle dump.
+    It is specified in the model methods ._get_save_keys() which attributes are saved.
+    
+    Returns the attribute dictionary.
+    """
+    dumpFile = Path(dumpFile)
+    attrDict = model.get_attr_dict()
+    # Save the data dictionary to a file
+    ending = ".bfy"
+    if isinstance(model, Flat):
+        ending += "-flat"
+    elif isinstance(model, Spherical):
+        ending += "-spherical"
+    dumpFile = dumpFile.with_suffix(str(dumpFile.suffix) + ending)
+    if dumpFile.exists():
+        raise FileExistsError("file was not written because it already exists at "+str(dumpFile))
+    try:
+        with open(dumpFile, "wb") as f:
+            pkl.dump(attrDict, f) 
+    except Exception:
+        print("File saving error")
+    print("A dump file of the model's attributes has been saved to "+str(dumpFile.resolve())+" and the following attributes were included: "
+            +str(list(attrDict.keys())).strip("[]"))
+    return attrDict
+
+def load_model(dumpFile, type="Flat"):
+    """
+    Returns a brightify model of specified type filled with from dumpFile
+    """
+    model = None
+    if type =="Flat":
+        model = Flat(outputFile=dumpFile)
+    elif type == "Spherical":
+        model = Spherical(outputFile=dumpFile)
+    else:
+        raise TypeError("Unsupported type hint")
+    return model
 
 #%%
 class BrightifyModel:
@@ -85,13 +184,11 @@ class BrightifyModel:
 
         
         if outputFile is not None:
-            if not path.exists(outputFile): raise ValueError("outputFile path does not exist")
+            outputFile=Path(outputFile)
+            if not outputFile.exists(): raise ValueError("outputFile path does not exist")
             else: # Loads previously saved model dump
-                dataDict = self.read_outputFile(outputFile=outputFile)
-                for k,v in dataDict.items():
-                    setattr(self, k, v)
-                print("the following attributes/variables of previously saved data were found: "
-                      +str(list(dataDict.keys())).strip("[]"))
+                attrDict = read_model(dumpFile=outputFile)
+                self._set_attributes(attrDict=attrDict)
                 return # THIS ENDS THE CONSTRUCTOR CALL HERE
         self.outputFile = outputFile
 
@@ -99,7 +196,9 @@ class BrightifyModel:
         # --- 1. Assigning simple variables ---
 
         # inputFile
-        if inputFile is not None and not path.exists(inputFile): raise ValueError("inputFile path does not exist")
+        if inputFile is not None:
+            inputFile = Path(inputFile)
+            if not inputFile.exists(): raise ValueError("inputFile path does not exist")
         self.inputFile = inputFile # Even though data is put into self.data, the user might want to check later what his inputFile has been.
         
         # input_is_ascii
@@ -125,105 +224,48 @@ class BrightifyModel:
 
         # --- 2. Data loading ---
 
-        self.data = self.read_inputFile(inputFile=self.inputFile, input_is_ascii=self.input_is_ascii)
+        # this needs to be a pandas DataFrame
+        self.data = read_data(inputFile=self.inputFile, input_is_ascii=self.input_is_ascii)
              
 
         # --- 3 Filter initialization ---
         
         # Reset filter to include all data initially    
-        if not hasattr(self, 'filter'): # ignore case where outputFile has provided filter already
-            self.reset_filter()
+        self.reset_filter()
 
 
-    @staticmethod
-    def read_outputFile(outputFile):
-        # this reads a previous dump of a model and returns the dictionary (does not change self object, and doesn't need it at all because it is static method)
-        print("previous Brightify model dump file is being read")
-        with open(outputFile, 'rb') as f:
-            dataDict = pkl.load(f)
-        if not isinstance(dataDict, dict):
-            raise TypeError("the unpacked previous brightify dump from outputFile seems not to have dictionary type")
-        return dataDict
-        
-    @staticmethod
-    def read_inputFile(inputFile, input_is_ascii):
-        # reads data and returns it (does not change self object, and doesn't need it at all because it is static method)
-        data = None
-        if input_is_ascii:
-            with open(inputFile, 'r') as f:
-                data = f.read().replace('D', 'E')
-            data = pd.read_csv(
-                StringIO(data), header=None, delim_whitespace=True, 
-                names=(PDG_CODE_NAME, POSITION_NAME_X, POSITION_NAME_Y, POSITION_NAME_Z,
-                    VELOCITY_NAME_X, VELOCITY_NAME_Y, VELOCITY_NAME_Z, ENERGY_NAME, WEIGHT_NAME,
-                    'time', 'c1', 'c2', 'c3', 'name', 'nocas', 'nobch', 'no')
-                )
-        elif str(inputFile).endswith(".mcpl") or str(inputFile).endswith(".mcpl.gz"):
-            # Read the MCPL file (format used for Brightify input files)
-            myfile=mcpl.MCPLFile(inputFile,blocklength=1e13) # the blocklength is so high, it will almost always load the entire file
-            # Loop through each particle block in the MCPL file and store data
-            # in a list of pandas DataFrames, and then combine all into one dataframe.
-            data_frames = []
-            for p in myfile.particle_blocks: # since we have a loop over the blocks, shouldn't each block's data be appended to self.data, instead of overwriting it each time?
-                df = pd.DataFrame({
-                    PDG_CODE_NAME: p.pdgcode,  # Particle PDG code
-                    POSITION_NAME_X: p.x,  # x-position
-                    POSITION_NAME_Y: p.y,  # y-position
-                    POSITION_NAME_Z: p.z,  # z-position
-                    VELOCITY_NAME_X: p.ux,  # Velocity in x-direction
-                    VELOCITY_NAME_Y: p.uy,  # Velocity in y-direction
-                    VELOCITY_NAME_Z: p.uz,  # Velocity in z-direction
-                    ENERGY_NAME: p.ekin,  # Kinetic energy
-                    WEIGHT_NAME: p.weight  # Weight of the particle
-                })
-                data_frames.append(df)
-            data = pd.concat(data_frames, ignore_index=True)
-        else: raise ValueError("input could not be interpreted") 
-        return data  
-
-
-    def save_model_dump(self, saveFile, include_data=False, include_filter=False, only_return_dict=False, extra_keys=list()):
-        """
-                Saves the model's data to a pickle file for future use.
-                
-                Parameters
-                ----------
-                saveFile : str
-                    The output file path where the data will be saved.
-                
-                Returns
-                -------
-                None.
-                """
-        # Saves a dictionary (dump via pickle), where the keys are attribute names and values are the underlying python objects
-        if not only_return_dict and not path.exists(saveFile): raise ValueError("save path does not exist")
-        super_keys = ['inputFile',
-                      'input_is_ascii',
-                      'outputFile',
-                      'primary_protons',
-                      'pCurrent',
-                      'dir_size'] # These are variables of the super-class that automatically considered to be saved.
-        if include_data: super_keys.append('data')
-        if include_filter: super_keys.append('filter')
-        sub_keys = self.get_save_keys() # get keys that are specified in the sub-class implementations of get_save_keys()
-        all_keys = super_keys + sub_keys + extra_keys
-        active_keys = [k for k in all_keys if hasattr(self, k)] # filter to exclude those that the object doesnt have.
-        dataDict = {k: getattr(self, k) for k in active_keys}
-        # Save the data dictionary to a pickle file
-        if only_return_dict:
-            return dataDict
-        with open(saveFile, 'wb') as f:
-            pkl.dump(dataDict, f) 
-        print("A dump file of the BrightifyModel has been saved to "+str(saveFile)+" and the following attributes were included: "
-                +str(list(dataDict.keys())).strip("[]"))
-        return dataDict
-
-    def get_save_keys(self):
+    def _get_save_keys(self):
         # This method should be implemented by each subclass.
         # There, make sure it returns the names of the variables that shall be included in the save of that subclass-object.
         # if it is not implemented, here we just return an empty list as substitute.
         print("an empty list of things to save has been passed from your object to the save method")
         return list()
+
+    def get_attributes(self):
+        """
+            Returns a dictionary of a model's attributes.
+            
+            Returns
+            -------
+            Dictionary containing those attributes (names and values) that are mentioned at model._get_save_keys().
+        """     
+        super_keys = ['inputFile',
+                        'primary_protons',
+                        'pCurrent',
+                        'dir_size'] # These are variables of the super-class that automatically considered to be saved.
+        sub_keys = self._get_save_keys() # get keys that are specified in the sub-class implementations of _get_save_keys()
+        all_keys = super_keys + sub_keys
+        active_keys = [k for k in all_keys if hasattr(self, k)] # filter to exclude those that the object doesnt have.
+        attrDict = {k: getattr(self, k) for k in active_keys}
+        return attrDict
+
+    def _set_attributes(self, attrDict):
+        # this sets attributes of the self object with the attrDict containing the attribute names and data
+        for k,v in attrDict.items():
+            setattr(self, k, v)
+        print("the following attributes/variables were set: "
+              +str(list(attrDict.keys())).strip("[]"))
+        
 
     # def coordinate_transform(self):
     #     - coordinate_system: This program expects the z coordinate direction to be the normal direction of the brightness maps. \
@@ -482,7 +524,7 @@ class Spherical(BrightifyModel):
                          dir_size=dir_size)
 
         # --- 1. Assigning simple variables --- 
-        
+
         # pos_size
         try: pos_size = float(pos_size)
         except (ValueError, TypeError): raise ValueError("pos_size must be float-convertible")
@@ -567,7 +609,7 @@ class Spherical(BrightifyModel):
             )
         plt.colorbar(sc, ax=ax)
 
-    def get_save_keys(self):
+    def _get_save_keys(self):
         # Specify the keys of the attributes to save
         return ['inputFile', 'primary_protons', 'pCurrent', 'pos_size', 'dir_size',
                 'particle', 'energy', 'radius', 'spiral_points', 'spiral',
@@ -594,7 +636,7 @@ class Spherical(BrightifyModel):
     
 class Flat(BrightifyModel):
     def __init__(self, inputFile=None, input_is_ascii=False,
-                 outputFile=None, 
+                 outputFile=None,
                  primary_protons=None, pCurrent=None, 
                  dir_size=None,
                  pos_size_x=None, pos_size_y=None):
@@ -615,16 +657,19 @@ class Flat(BrightifyModel):
         # --- 1. Initialize position window variables ---
         
         # pos_size_x
-        try: pos_size_x = float(pos_size_x)
-        except (ValueError, TypeError): raise ValueError("pos_size_x must be float-convertible")
-        self.pos_size_x = pos_size_x
+        if not hasattr(self, 'pos_size_x'): # because super constructor might have filled already if dump was imported
+            try: pos_size_x = float(pos_size_x)
+            except (ValueError, TypeError): raise ValueError("pos_size_x must be float-convertible")
+            self.pos_size_x = pos_size_x
 
         # pos_size_y
-        try: pos_size_y = float(pos_size_y)
-        except (ValueError, TypeError): raise ValueError("pos_size_y must be float-convertible")
-        self.pos_size_y = pos_size_y
+        if not hasattr(self, 'pos_size_y'):
+            try: pos_size_y = float(pos_size_y)
+            except (ValueError, TypeError): raise ValueError("pos_size_y must be float-convertible")
+            self.pos_size_y = pos_size_y
 
-        self.pos_size = pos_size_x * pos_size_y
+        if not hasattr(self, 'pos_size'):
+            self.pos_size = pos_size_x * pos_size_y
 
     #------------------ Helper: prepare meshgrid ------------------#
     def prepare_vectors(self):
@@ -688,17 +733,18 @@ class Flat(BrightifyModel):
             raise ValueError(f"Unknown calculation method: {method}")
 
     #------------------   save data   --------------------#
-    def get_save_keys(self):
-        keys = ['inputFile', 'primary_protons', 'pCurrent', 'pos_size', 'dir_size',
-            'particle', 'energy', 'dir_window', 'x_range', 'y_range',
-            'x_mesh', 'y_mesh', 'z_mesh', 'total_neutrons', 'total_weights',
-            'window_weights', 'total_mean', 'relative_error']
+    def _get_save_keys(self):
+        keys = ['inputFile', 'primary_protons', 'pCurrent', 
+                'pos_size_x', 'pos_size_y', 'pos_size', 'dir_size',
+                'particle', 'energy', 'dir_window', 'x_range', 'y_range',
+                'x_mesh', 'y_mesh', 'z_mesh', 'total_neutrons', 'total_weights',
+                'window_weights', 'total_mean', 'relative_error', 'sigma']
         # for the case method == "mean":
         keys.extend(['mean_directions', 'mean_directions_window',
-            'mean_directions_spher'])
+                     'mean_directions_spher'])
         # for the case method == "adaptive":
         keys.extend(['mean_directions','mean_directions_spher','adaptive_dir',
-            'adaptive_dir_spher', 'hist','hist_edges'])
+                     'adaptive_dir_spher', 'hist','hist_edges'])
         return keys
 
 
@@ -889,9 +935,6 @@ class Flat(BrightifyModel):
         self.relative_error = self.r_err
 
   
-        keys = ['sigma']
-        dataDict = self.save_model_dump(saveFile=outputFile, include_data=False, include_filter=False, only_return_dict=True, extra_keys=keys)
-        
-        return dataDict, self.brightness         
+        return self.brightness         
 
 # %%

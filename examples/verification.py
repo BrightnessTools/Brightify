@@ -1,30 +1,50 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
+#%%
+try:
+    import IPython
+    ipython = IPython.get_ipython()
+    if ipython is not None:
+        ipython.run_line_magic("load_ext", "autoreload")
+        ipython.run_line_magic("autoreload", "2")
+except (ImportError, AttributeError):
+    pass
+
 #%%
 from pathlib import Path
 
 this_file_path = Path(__file__)
-examples_folder_path = this_file_path.parent
-project_folder_path = examples_folder_path.parent
+examples_folder_path = this_file_path.parent # provided that this file is in the folder "examples"
+Brightify_folder_path = examples_folder_path.parent
 
 #%%
+
+# enter paths relative to the top folder "Brightify" that contains the examples folder
+
+# path = './test.mcpl.gz'
 path = './examples/uniform/output.mcpl.gz'
 # path = './examples/Brightify Fig 6/Fig6a/output.mcpl.gz' # The number of primary particles is 4.7e7 and the resolution is 1 cm2 and 0.006 sr, based on the paper 
 # path = './examples/Brightify Fig 6/Fig6a/output.mcpl.gz' # The number of primary particles is 4.7e7 and the resolution is 1 cm2 and 0.006 sr, based on the paper 
 # path = './examples/Brightify Fig 6/Fig6a/output.mcpl.gz' # The number of primary particles is 4.7e7 and the resolution is 1 cm2 and 0.006 sr, based on the paper 
 # path = './examples/mcpl_different_normal/dump_final.mcpl.gz'
 
-path = str(project_folder_path) + path[1:] 
-print(path)
-from os import path as path_module
-print(path_module.exists(path))
+
+path = Path(Brightify_folder_path / path.lstrip('./'))
+print(path, "was found")
+print("valid path: "+str(path) if path.exists() else "unvalid path: "+str(path))
+
+
 #%%
-from brightify import Flat
-#%%
+import brightify as bfy
+
+flatModel = bfy.load_model("tessst.bfy-flat", "Flat")
+
 # import brightify
 # print(brightify.main.ENERGY_NAME)
+
 #%%
-flatModel = Flat(
+flatModel = bfy.Flat(
     inputFile=path, 
     primary_protons = 4.7e7, # number
     pCurrent = 1.0,
