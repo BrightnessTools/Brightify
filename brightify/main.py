@@ -5,6 +5,7 @@
 import pandas as pd
 import numpy as np
 from os import path
+from io import StringIO
 import pickle as pkl
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -13,7 +14,7 @@ from brightify import fast_computation as fc
 
 
 #%% Define particle types with their corresponding PDG codes
-PARTICLE = {
+PDG_CODES = {
     'proton': 2212,  # Proton PDG code
     'neutron': 2112,  # Neutron PDG code
     'photon': 22,  # Photon PDG code
@@ -22,92 +23,214 @@ PARTICLE = {
 
 #%% List of column names for different types of data (position, velocity, etc.)
 # These will be used to organize and access particle data
-pos = ['x', 'y', 'z']  # Position components (x, y, z)
-vel = ['Vx', 'Vy', 'Vz']  # Velocity components (Vx, Vy, Vz)
-direction = ['dirX', 'dirY', 'dirZ']  # Direction components (cosines in 3D space)
-image_dir = ['imX', 'imY', 'imZ']  # Image plane direction components
-pos_w = ['Xw', 'Yw', 'Zw']  # Weighted position components
-vel_w = ['Vxw', 'Vyw', 'Vzw']  # Weighted velocity components
-pos_m = ['Xm', 'Ym', 'Zm']  # Mean position components
-vel_m = ['Vxm', 'Vym', 'Vzm']  # Mean velocity components
+PDG_CODE_NAME = 'Kf'
+ENERGY_NAME = 'e'
+WEIGHT_NAME = 'Wt'
+POSITION_NAME_X, POSITION_NAME_Y, POSITION_NAME_Z = 'x', 'y', 'z'
+POSITION_NAMES_XYZ = [POSITION_NAME_X, POSITION_NAME_Y, POSITION_NAME_Z] # Position components (x, y, z)
+VELOCITY_NAME_X, VELOCITY_NAME_Y, VELOCITY_NAME_Z = 'Vx', 'Vy', 'Vz'
+VELOCITY_NAMES_XYZ = [VELOCITY_NAME_X, VELOCITY_NAME_Y, VELOCITY_NAME_Z] # Velocity components (Vx, Vy, Vz)
+
+# POSITION_NAMES = ['x', 'y', 'z']  # Position components (x, y, z)
+# VELOCITY_NAMES = ['Vx', 'Vy', 'Vz']  # Velocity components (Vx, Vy, Vz)
+# DIRECTION_NAMES = ['dirX', 'dirY', 'dirZ']  # Direction components (cosines in 3D space)
+# IMAGE_DIRECTION_NAMES = ['imX', 'imY', 'imZ']  # Image plane direction components
+# WEIGHTED_POSITION_NAMES = ['Xw', 'Yw', 'Zw']  # Weighted position components
+# WEIGHTED_VELOCITY_NAMES = ['Vxw', 'Vyw', 'Vzw']  # Weighted velocity components
+# MEAN_POSITION_NAMES = ['Xm', 'Ym', 'Zm']  # Mean position components
+# MEAN_VELOCITY_NAMES = ['Vxm', 'Vym', 'Vzm']  # Mean velocity components
 
 #%%
 class BrightifyModel:
-    def __init__(self, inputFile=None, outputFile=None, primary_protons=None,
-                 pCurrent=None, pos_size_x=None, pos_size_y=None, dir_size=None):
+    # This is the super-class.
+    # The classes that inherit from it (via "class Subclass(Superclass)") I call sub-classes, e.g. here "Flat" and "Spherical".
+    # The user is expected to start by calling "object = Subclass()" e.g. "flat_object = Flat()",
+    # i.e. calling the constructor, and then work on that object by calling its variables/methods as e.g. "flat_object.variable1" or "flat_object.method1()".
+    # 
+    # The super-class is supposed to define variables and methods that any sub-class object would need in the same way.
+    # They can be called just as "subclassobject.superclassvariable" or similarly for methods.
+    # To enforce that a method MUST be implemented in all subclasses, the @abstractmethod decorator can be used.
+    # For example, a variable that could be shared is "inputFile" or "data" since regardless of the Model type, that is needed.
+    # A shared method would be for example "save_data" that just saves the data object as a dump file.
+    # 
+    # If a variable or method shall have special content/behavior for a sub-class object,
+    # it should be defined in that sub class again, overwriting the functionality of that what is provided by the super-class.
+    # It MUST be defined in the sub class if the superclass method has the @abstractmethod decorator.
+    #
+    # Regarding the constructors, we can defined a super-class constructor that does things that any sub-class constructor should do in the same way.
+    # Defining sub-class constructors overwrites that super-class constructor, but we can call the super-class constructor as "super().__init__().
+    # In general, any superclass thing can be called as "super().thing".
+    # Note that the super class constructor should only contain parameters that all the sub-class constructors have in common.
+    
+    def __init__(self, 
+                 inputFile=None, input_is_ascii=False,
+                 outputFile=None,
+                 primary_protons=None, pCurrent=None,   
+                 dir_size=None
+                 ): 
         """
         Initializes the BrightifyModel class.
         
         Parameters:
-        - inputFile: Path to the input file containing particle data (optional).
-        - outputFile: Path to the output file where results are saved (optional).
-        - primary_protons: Number of primary protons (used for brightness calculation).
-        - pCurrent: Particle current (used for brightness calculation).
-        - pos_size_x: Horizontal size of the position window (used for brightness calculation).
-        - pose_size_y: Vertical size of the position window.
-        - dir_size: Size of the direction window (used for brightness calculation).
+        - inputFile: Path to the input file containing particle data (optional). Default accepted format is .mcpl(.gz).
+        - input_is_ascii: Whether you are using ascii input separated by whitespace instead of .mcpl(.gz) files. 
+        - outputFile: Optional path to file in which previous BrightifyModel was saved (pickle dump of attributes).
+        - primary_protons: Number of primary protons (used for brightness calculation). Can be found in standard output file of MC code
+        - pCurrent: Proton current (used for brightness calculation).
+        - dir_size: Size of the solid-angle window (in steradians) around the direction used for brightness calculation
         """
+
+
+        # --- 0. catch case where user gives a dump file ---
+
         
-        # Ensure that either inputFile or outputFile exists
-#        assert path.exists(inputFile) or path.exists(outputFile)
+        if outputFile is not None:
+            if not path.exists(outputFile): raise ValueError("outputFile path does not exist")
+            else: # Loads previously saved model dump
+                dataDict = self.read_outputFile(outputFile=outputFile)
+                for k,v in dataDict.items():
+                    setattr(self, k, v)
+                print("the following attributes/variables of previously saved data were found: "
+                      +str(list(dataDict.keys())).strip("[]"))
+                return # THIS ENDS THE CONSTRUCTOR CALL HERE
+        self.outputFile = outputFile
+
+
+        # --- 1. Assigning simple variables ---
+
+        # inputFile
+        if inputFile is not None and not path.exists(inputFile): raise ValueError("inputFile path does not exist")
+        self.inputFile = inputFile # Even though data is put into self.data, the user might want to check later what his inputFile has been.
         
-        self.inputFile = inputFile
+        # input_is_ascii
+        try: input_is_ascii = bool(input_is_ascii)
+        except (ValueError, TypeError): raise ValueError("input_is_ascii must be bool-convertible")
+        self.input_is_ascii = input_is_ascii
+        
+        # primary_protons
+        try: primary_protons = int(primary_protons)
+        except (ValueError, TypeError): raise ValueError("primary_protons must be int-convertible")
         self.primary_protons = primary_protons
+        
+        # pCurrent
+        try: pCurrent = float(pCurrent)
+        except (ValueError, TypeError): raise ValueError("pCurrent must be float-convertible")
         self.pCurrent = pCurrent
-        self.pos_size_x = pos_size_x
-        self.pos_size_y = pos_size_y
-        self.pos_size = pos_size_x * pos_size_y
+        
+        # dir_size
+        try: dir_size = float(dir_size)
+        except (ValueError, TypeError): raise ValueError("dir_size must be float-convertible")
         self.dir_size = dir_size
+
+
+        # --- 2. Data loading ---
+
+        self.data = self.read_inputFile(inputFile=self.inputFile, input_is_ascii=self.input_is_ascii)
+             
+
+        # --- 3 Filter initialization ---
         
-        # If an input file is provided, load the particle data from the file
-        if inputFile:
-            # Check that provided values are of the correct type
-            assert type(int(self.primary_protons)) == int
-            assert type(self.pCurrent) == float
-            assert type(pos_size_x) == float
-            assert type(pos_size_y) == float
-            assert type(dir_size) == float
-            
-# if the ascii version is used as input
-#            with open(self.inputFile, 'r') as f:
-#                 self.data = f.read().replace('D', 'E')
-#                
-#            self.data = pd.read_csv(
-#                 StringIO(self.data), header=None, delim_whitespace=True, 
-#                 names=('Kf', 'x', 'y', 'z', 'Vx', 'Vy', 'Vz', 'e', 'Wt',
-#                        'time', 'c1', 'c2', 'c3', 'name', 'nocas', 'nobch', 'no'
-#                        )
-#                 )
-            
-            # Read the MCPL file (format used for Brightify input files)
-            myfile=mcpl.MCPLFile(self.inputFile,blocklength=1e13)
-            # Loop through each particle block in the MCPL file and store data
-            # in a pandas DataFrame
-            for p in myfile.particle_blocks:
-                self.data = pd.DataFrame({
-                    'Kf': p.pdgcode,  # Particle PDG code
-                    'x': p.x,  # x-position
-                    'y': p.y,  # y-position
-                    'z': p.z,  # z-position
-                    'Vx': p.ux,  # Velocity in x-direction
-                    'Vy': p.uy,  # Velocity in y-direction
-                    'Vz': p.uz,  # Velocity in z-direction
-                    'e': p.ekin,  # Kinetic energy
-                    'Wt': p.weight  # Weight of the particle
-                })
-                
-            # Reset filter to include all data initially    
+        # Reset filter to include all data initially    
+        if not hasattr(self, 'filter'): # ignore case where outputFile has provided filter already
             self.reset_filter()
-            
-        # If an output file is provided, load previously saved data
-        if outputFile:
-            with open(outputFile, 'rb') as f:
-                dataDict = pkl.load(f)
-            
-            for k,v in dataDict.items():
-                self.__dict__[k] = v
+
+
+    @staticmethod
+    def read_outputFile(outputFile):
+        # this reads a previous dump of a model and returns the dictionary (does not change self object, and doesn't need it at all because it is static method)
+        print("previous Brightify model dump file is being read")
+        with open(outputFile, 'rb') as f:
+            dataDict = pkl.load(f)
+        if not isinstance(dataDict, dict):
+            raise TypeError("the unpacked previous brightify dump from outputFile seems not to have dictionary type")
+        return dataDict
         
-        
+    @staticmethod
+    def read_inputFile(inputFile, input_is_ascii):
+        # reads data and returns it (does not change self object, and doesn't need it at all because it is static method)
+        data = None
+        if input_is_ascii:
+            with open(inputFile, 'r') as f:
+                data = f.read().replace('D', 'E')
+            data = pd.read_csv(
+                StringIO(data), header=None, delim_whitespace=True, 
+                names=(PDG_CODE_NAME, POSITION_NAME_X, POSITION_NAME_Y, POSITION_NAME_Z,
+                    VELOCITY_NAME_X, VELOCITY_NAME_Y, VELOCITY_NAME_Z, ENERGY_NAME, WEIGHT_NAME,
+                    'time', 'c1', 'c2', 'c3', 'name', 'nocas', 'nobch', 'no')
+                )
+        elif str(inputFile).endswith(".mcpl") or str(inputFile).endswith(".mcpl.gz"):
+            # Read the MCPL file (format used for Brightify input files)
+            myfile=mcpl.MCPLFile(inputFile,blocklength=1e13) # the blocklength is so high, it will almost always load the entire file
+            # Loop through each particle block in the MCPL file and store data
+            # in a list of pandas DataFrames, and then combine all into one dataframe.
+            data_frames = []
+            for p in myfile.particle_blocks: # since we have a loop over the blocks, shouldn't each block's data be appended to self.data, instead of overwriting it each time?
+                df = pd.DataFrame({
+                    PDG_CODE_NAME: p.pdgcode,  # Particle PDG code
+                    POSITION_NAME_X: p.x,  # x-position
+                    POSITION_NAME_Y: p.y,  # y-position
+                    POSITION_NAME_Z: p.z,  # z-position
+                    VELOCITY_NAME_X: p.ux,  # Velocity in x-direction
+                    VELOCITY_NAME_Y: p.uy,  # Velocity in y-direction
+                    VELOCITY_NAME_Z: p.uz,  # Velocity in z-direction
+                    ENERGY_NAME: p.ekin,  # Kinetic energy
+                    WEIGHT_NAME: p.weight  # Weight of the particle
+                })
+                data_frames.append(df)
+            data = pd.concat(data_frames, ignore_index=True)
+        else: raise ValueError("input could not be interpreted") 
+        return data  
+
+
+    def save_model_dump(self, saveFile, include_data=False, include_filter=False, only_return_dict=False, extra_keys=list()):
+        """
+                Saves the model's data to a pickle file for future use.
+                
+                Parameters
+                ----------
+                saveFile : str
+                    The output file path where the data will be saved.
+                
+                Returns
+                -------
+                None.
+                """
+        # Saves a dictionary (dump via pickle), where the keys are attribute names and values are the underlying python objects
+        if not only_return_dict and not path.exists(saveFile): raise ValueError("save path does not exist")
+        super_keys = ['inputFile',
+                      'input_is_ascii',
+                      'outputFile',
+                      'primary_protons',
+                      'pCurrent',
+                      'dir_size'] # These are variables of the super-class that automatically considered to be saved.
+        if include_data: super_keys.append('data')
+        if include_filter: super_keys.append('filter')
+        sub_keys = self.get_save_keys() # get keys that are specified in the sub-class implementations of get_save_keys()
+        all_keys = super_keys + sub_keys + extra_keys
+        active_keys = [k for k in all_keys if hasattr(self, k)] # filter to exclude those that the object doesnt have.
+        dataDict = {k: getattr(self, k) for k in active_keys}
+        # Save the data dictionary to a pickle file
+        if only_return_dict:
+            return dataDict
+        with open(saveFile, 'wb') as f:
+            pkl.dump(dataDict, f) 
+        print("A dump file of the BrightifyModel has been saved to "+str(saveFile)+" and the following attributes were included: "
+                +str(list(dataDict.keys())).strip("[]"))
+        return dataDict
+
+    def get_save_keys(self):
+        # This method should be implemented by each subclass.
+        # There, make sure it returns the names of the variables that shall be included in the save of that subclass-object.
+        # if it is not implemented, here we just return an empty list as substitute.
+        print("an empty list of things to save has been passed from your object to the save method")
+        return list()
+
+    # def coordinate_transform(self):
+    #     - coordinate_system: This program expects the z coordinate direction to be the normal direction of the brightness maps. \
+    #                 You may want to transform your data beforehand yourself, or input here three Euler angles (alpha, beta, gamma) (in degrees).
+    #                 alpha determines how much the x axis needs to be 
+
+    
     @property
     def data_filter(self):
         """
@@ -115,7 +238,6 @@ class BrightifyModel:
         Returns the data that matches the current filter conditions.
         """
         return self.data[self.filter]
-    
     
     @property
     def brightness(self):
@@ -135,7 +257,6 @@ class BrightifyModel:
         
         return self.sigma / np.sqrt(self.window_weights)
 
-
     def compute_sigma(self, slice_filt_i, Wt_sq_sum, Am, window_weight):
         """
         Compute the standard deviation (sigma) for a given filtered data slice.
@@ -145,7 +266,7 @@ class BrightifyModel:
     
         # Compute sigma using precomputed values
         return np.sqrt(
-            np.abs(fc.sum_f(slice_filt_i['Wt']**2) / Wt_sq_sum - Am * window_weight) /
+            np.abs(fc.sum_f(slice_filt_i[WEIGHT_NAME]**2) / Wt_sq_sum - Am * window_weight) /
             (window_weight - 1)
         )
     
@@ -154,10 +275,9 @@ class BrightifyModel:
         Method to reset the filter to include all data.
         Resets the filter so that no data is excluded by default.
         """
-        self.filter = self.data.index >= 0
+        self.filter = self.data.index >= 0 # this can just be a ones-array of same length as data        
     
-    
-    def apply_filter(self, particle=None, energy=None, x=None, y=None):
+    def apply_filter(self, particle=None, energy=None, x=None, y=None): # for large data would it make sense to filter while creating the object (i.e. in the constructor) so not all data is read into memory?
         """
         Applies filters to the particle data based on the given criteria:
         - particle: Type of particle (e.g., 'proton', 'neutron')
@@ -168,27 +288,26 @@ class BrightifyModel:
         # If a particle type is specified, filter by the particle's PDG code
         if particle:
             self.particle = particle
-            self.filter &= (self.data['Kf'] == PARTICLE[particle])
+            self.filter &= (self.data[PDG_CODE_NAME] == PDG_CODES[particle])
         
         # If an energy range is specified, filter particles within that range
         if energy:
             self.energy = (min(energy), max(energy))
-            self.filter &= (self.data['e'] >= self.energy[0])
-            self.filter &= (self.data['e'] <= self.energy[1])
+            self.filter &= (self.data[ENERGY_NAME] >= self.energy[0])
+            self.filter &= (self.data[ENERGY_NAME] <= self.energy[1])
             
         # If an x-position range is specified, filter particles within that range
         if x:
             self.xf = (min(x), max(x))
-            self.filter &= (self.data['x'] >= self.xf[0])
-            self.filter &= (self.data['x'] <= self.xf[1])
+            self.filter &= (self.data[POSITION_NAME_X] >= self.xf[0])
+            self.filter &= (self.data[POSITION_NAME_X] <= self.xf[1])
             
         # If a y-position range is specified, filter particles within that range
         if y:
             self.yf = (min(y), max(y))
-            self.filter &= (self.data['y'] >= self.yf[0])
-            self.filter &= (self.data['y'] <= self.yf[1])
+            self.filter &= (self.data[POSITION_NAME_Y] >= self.yf[0])
+            self.filter &= (self.data[POSITION_NAME_Y] <= self.yf[1])
             
-    
     def calculate_properties(self, data_filt, shape1D, shape2D, 
                              slice_filter_func, points, forced_direction=None):
         """
@@ -199,8 +318,8 @@ class BrightifyModel:
         forced_direction : np.ndarray or None
             If provided, use this direction for all slices instead of computing mean.
         """
-        Wt_sq_sum = fc.sum_f(self.data['Wt']**2)
-        Am = np.mean(self.data['Wt']**2)
+        Wt_sq_sum = fc.sum_f(self.data[WEIGHT_NAME]**2)
+        Am = np.mean(self.data[WEIGHT_NAME]**2)
     
         self.total_neutrons = np.full(shape1D, np.nan)
         self.total_weights = np.full(shape1D, np.nan)
@@ -225,13 +344,13 @@ class BrightifyModel:
             if forced_direction is not None:
                 direction_vec = forced_direction
             else:
-                direction_vec = fc.direction_f(fc.mean_f(slice_i[vel], slice_i.Wt))
+                direction_vec = fc.direction_f(fc.mean_f(slice_i[VELOCITY_NAMES_XYZ], slice_i.Wt))
     
             self.mean_directions[i] = direction_vec
             self.mean_directions_spher[i] = fc.cart2spher(*direction_vec)
     
             # Apply angular filter
-            slice_filt_i = slice_i[fc.cos_f(slice_i[vel], direction_vec) >= self.dir_window]
+            slice_filt_i = slice_i[fc.cos_f(slice_i[VELOCITY_NAMES_XYZ], direction_vec) >= self.dir_window]
             self.window_weights[i] = fc.sum_f(slice_filt_i.Wt)
     
             # Sigma and relative error
@@ -240,8 +359,7 @@ class BrightifyModel:
     
             # Weighted direction
             self.mean_directions_window[i] = direction_vec * self.window_weights[i]
-        
-        
+          
     def calculate_properties_adaptive(self, data_filt, shape1D, shape2D, 
                                   slice_filter_func, points, bins_cart=35, threshold_frac=0.98):
         """
@@ -256,8 +374,8 @@ class BrightifyModel:
             Fraction of the global histogram maximum to define maxima voxels.
         """
         # Calculate mean squared weight (Am) and sum of squared weights (Wt_sq_sum)
-        Wt_sq_sum = fc.sum_f(self.data['Wt']**2)  # Global sum of squared weights
-        Am = np.mean(self.data['Wt']**2)  # Mean squared weight
+        Wt_sq_sum = fc.sum_f(self.data[WEIGHT_NAME]**2)  # Global sum of squared weights
+        Am = np.mean(self.data[WEIGHT_NAME]**2)  # Mean squared weight
     
         # Initialize arrays
         self.total_neutrons = np.full(shape1D, np.nan)
@@ -287,14 +405,14 @@ class BrightifyModel:
             self.total_mean[i] = np.mean(slice_i.Wt)
     
             # Mean direction of slice
-            self.mean_directions[i] = fc.direction_f(fc.mean_f(slice_i[vel], slice_i.Wt))         
+            self.mean_directions[i] = fc.direction_f(fc.mean_f(slice_i[VELOCITY_NAMES_XYZ], slice_i.Wt))         
             self.mean_directions_spher[i] = fc.cart2spher(*self.mean_directions[i])
     
             # ------------------ Cartesian histogram ------------------
-            hist, edges = np.histogramdd(slice_i[vel].to_numpy(),
+            hist, edges = np.histogramdd(slice_i[VELOCITY_NAMES_XYZ].to_numpy(),
                                          bins=[bins_cart]*3,
                                          range=[[-1,1],[-1,1],[-1,1]],
-                                         weights=slice_i['Wt'])
+                                         weights=slice_i[WEIGHT_NAME])
             self.hist[i] = hist
             self.hist_edges[i] = edges
     
@@ -323,7 +441,7 @@ class BrightifyModel:
             self.adaptive_dir_spher[i] = fc.cart2spher(*adaptive_dir_vec)
     
             # Filter directions within angular window
-            cos_filter = fc.cos_f(slice_i[vel], self.adaptive_dir[i])
+            cos_filter = fc.cos_f(slice_i[VELOCITY_NAMES_XYZ], self.adaptive_dir[i])
             slice_filt_i = slice_i[cos_filter >= self.dir_window]
             self.window_weights[i] = fc.sum_f(slice_filt_i.Wt)
     
@@ -335,52 +453,60 @@ class BrightifyModel:
 
 
 class Spherical(BrightifyModel):
-    def __init__(self, inputFile=None, outputFile=None, primary_protons=None, 
-                 pCurrent=None, pos_size=None, dir_size=None, radius=None,
+    def __init__(self, 
+                 inputFile=None, input_is_ascii=False,
+                 outputFile=None,
+                 primary_protons=None, pCurrent=None,
+                 dir_size=None, 
+                 pos_size=None,
+                 radius=None,
                  spiral_points=None):
         """
         Initialize the Spherical model, which is a subclass of BrightifyModel.
         
-        Parameters
+        Parameters (in addition to BrightifyModel() Parameters)
         ----------
-        primary_protons : int
-            number of primary protons. Can be found in standard output file of 
-            MC code
-        pCurrent : float
-            proton current defined by user.
-        pos_size : float
-            position window size defined by user.
-        dir_size : float
-            direction window size defined by user.
-        radius : float
-            radius of the spherical shell of the dump source defined by user.
-        spiral_points : int
-            number of points for spiral scan.
+        - pos_size: position window size.
+        - radius: radius of the spherical shell of the dump source defined by user.
+        - spiral_points: number of points for spiral scan.
 
         Returns
         -------
         None.
 
         """
-        # Initialize the parent class (BrightifyModel) with relevant arguments
-        super().__init__(inputFile, outputFile, primary_protons, pCurrent, 
-                         pos_size, dir_size)
+        # --- 0. Initialize via the parent class (BrightifyModel) constructor with relevant arguments ---
+        super().__init__(inputFile=inputFile, input_is_ascii=input_is_ascii,
+                         outputFile=outputFile,
+                         primary_protons=primary_protons, pCurrent=pCurrent,
+                         dir_size=dir_size)
+
+        # --- 1. Assigning simple variables --- 
         
-        # If input file is provided, validate and initialize additional parameters
-        if inputFile:
-            assert type(radius) == float
-            
-            self.radius = radius
-            self.spiral_points = spiral_points
-            self.spiral = Spherical.spiral_scan(spiral_points)
-            
+        # pos_size
+        try: pos_size = float(pos_size)
+        except (ValueError, TypeError): raise ValueError("pos_size must be float-convertible")
+        self.pos_size = pos_size
+
+        # radius
+        try: radius = float(radius)
+        except (ValueError, TypeError): raise ValueError("radius must be float-convertible")
+        self.radius = radius
+
+        # spiral_points
+        try: spiral_points = int(spiral_points)
+        except (ValueError, TypeError): raise ValueError("spiral_points must be int-convertible")
+        self.spiral_points = spiral_points
+
+        # --- 2. Spiral generation ---
+        self.spiral = Spherical.spiral_scan(spiral_points)
+              
     def spherical_filter_func(self, data_filt, vec):
         """
         Filtering function specific to the Spherical subclass. 
         It filters `slice_i` based on the cosine of the angle between `vec` and `data_filt`.
         """
-        return data_filt[fc.cos_f(data_filt[pos], vec) > self.pos_window]
-    
+        return data_filt[fc.cos_f(data_filt[POSITION_NAMES_XYZ], vec) > self.pos_window]
 
     def calculate(self):
         data_filt = self.data_filter
@@ -416,7 +542,6 @@ class Spherical(BrightifyModel):
         # Convert the spherical coordinates (theta, phi) to Cartesian coordinates
         return fc.spher2cart(1, spiral_theta, spiral_phi)
     
-
     def plot(self):
         """
         Plots a 3D brightness map of the spherical shell.
@@ -442,35 +567,14 @@ class Spherical(BrightifyModel):
             )
         plt.colorbar(sc, ax=ax)
 
-
-    def save(self, outputFile):
-        """
-        Saves the model's data to a pickle file for future use.
-        
-        Parameters
-        ----------
-        outputFile : str
-            The output file path where the data will be saved.
-        
-        Returns
-        -------
-        None.
-        """
+    def get_save_keys(self):
         # Specify the keys of the attributes to save
-        keys = ('inputFile', 'primary_protons', 'pCurrent', 'pos_size', 'dir_size',
+        return ['inputFile', 'primary_protons', 'pCurrent', 'pos_size', 'dir_size',
                 'particle', 'energy', 'radius', 'spiral_points', 'spiral',
                 'pos_window', 'dir_window', 'total_neutrons', 'total_weights',
                 'window_weights', 'total_mean', 'relative_error', 'mean_directions',
-                'mean_directions_window'
-                )
+                'mean_directions_window']
         
-        # Create a dictionary of data to save
-        dataDict = {k: self.__dict__[k] for k in keys}
-        
-        # Save the data dictionary to a pickle file
-        with open(outputFile, 'wb') as f:
-            pkl.dump(dataDict, f)        
-    
     def summary(self):
         """
         Returns a summary of the results of the spherical scan.
@@ -489,13 +593,38 @@ class Spherical(BrightifyModel):
         
     
 class Flat(BrightifyModel):
-    def __init__(self, inputFile=None, outputFile=None, primary_protons=None, 
-                 pCurrent=None, pos_size_x=None, pos_size_y=None, dir_size=None):
+    def __init__(self, inputFile=None, input_is_ascii=False,
+                 outputFile=None, 
+                 primary_protons=None, pCurrent=None, 
+                 dir_size=None,
+                 pos_size_x=None, pos_size_y=None):
         """
         Initialize the Flat model, subclass of BrightifyModel.
+
+        Parameters (in addition to BrightifyModel() Parameters)
+        - pos_size_x: Horizontal size of the position window (used for brightness calculation).
+        - pos_size_y: Vertical size of the position window.
         """
-        super().__init__(inputFile, outputFile, primary_protons, pCurrent, 
-                         pos_size_x, pos_size_y, dir_size)
+        
+        # --- 0. Initialize via the parent class (BrightifyModel) constructor with relevant arguments ---
+        super().__init__(inputFile=inputFile, input_is_ascii=input_is_ascii,
+                         outputFile=outputFile,
+                         primary_protons=primary_protons, pCurrent=pCurrent, 
+                         dir_size=dir_size)
+
+        # --- 1. Initialize position window variables ---
+        
+        # pos_size_x
+        try: pos_size_x = float(pos_size_x)
+        except (ValueError, TypeError): raise ValueError("pos_size_x must be float-convertible")
+        self.pos_size_x = pos_size_x
+
+        # pos_size_y
+        try: pos_size_y = float(pos_size_y)
+        except (ValueError, TypeError): raise ValueError("pos_size_y must be float-convertible")
+        self.pos_size_y = pos_size_y
+
+        self.pos_size = pos_size_x * pos_size_y
 
     #------------------ Helper: prepare meshgrid ------------------#
     def prepare_vectors(self):
@@ -511,10 +640,10 @@ class Flat(BrightifyModel):
 
     #------------------ Filter function ---------------------------#
     def flat_filter_func(self, data_filt, vec):
-        return data_filt[(data_filt['x'] >= vec[0] - self.pos_size_x/2) & 
-                         (data_filt['x'] <  vec[0] + self.pos_size_x/2) & 
-                         (data_filt['y'] >= vec[1] - self.pos_size_y/2) & 
-                         (data_filt['y'] <  vec[1] + self.pos_size_y/2)]
+        return data_filt[(data_filt[POSITION_NAME_X] >= vec[0] - self.pos_size_x/2) & 
+                         (data_filt[POSITION_NAME_X] <  vec[0] + self.pos_size_x/2) & 
+                         (data_filt[POSITION_NAME_Y] >= vec[1] - self.pos_size_y/2) & 
+                         (data_filt[POSITION_NAME_Y] <  vec[1] + self.pos_size_y/2)]
 
     #------------------ Unified calculation -----------------------#
     def calculate(self, method="adaptive", bins_cart=35, threshold_frac=0.98):
@@ -559,42 +688,19 @@ class Flat(BrightifyModel):
             raise ValueError(f"Unknown calculation method: {method}")
 
     #------------------   save data   --------------------#
-    def save(self, outputFile, method="adaptive"):
-        common_keys = (
-            'inputFile', 'primary_protons', 'pCurrent', 'pos_size', 'dir_size',
+    def get_save_keys(self):
+        keys = ['inputFile', 'primary_protons', 'pCurrent', 'pos_size', 'dir_size',
             'particle', 'energy', 'dir_window', 'x_range', 'y_range',
             'x_mesh', 'y_mesh', 'z_mesh', 'total_neutrons', 'total_weights',
-            'window_weights', 'total_mean', 'relative_error'
-            )
-        if method == "mean":
-            common_keys += (
-                'mean_directions', 'mean_directions_window',
-                'mean_directions_spher'
-                )
-        elif method == "adaptive":
-            common_keys += (
-                'mean_directions','mean_directions_spher','adaptive_dir',
-                'adaptive_dir_spher', 'hist','hist_edges'
-            )
-        elif method != "normal":
-            raise ValueError(f"Unknown save method: {method}")
-        dataDict = {k: self.__dict__[k] for k in common_keys}
-        with open(outputFile, 'wb') as f:
-            pkl.dump(dataDict, f)
+            'window_weights', 'total_mean', 'relative_error']
+        # for the case method == "mean":
+        keys.extend(['mean_directions', 'mean_directions_window',
+            'mean_directions_spher'])
+        # for the case method == "adaptive":
+        keys.extend(['mean_directions','mean_directions_spher','adaptive_dir',
+            'adaptive_dir_spher', 'hist','hist_edges'])
+        return keys
 
-    #------------------   load data   --------------------#
-    def load(self, inputFile):
-        """
-        Load saved brightness data into the Flat object.
-        """
-        with open(inputFile, 'rb') as f:
-            dataDict = pkl.load(f)
-    
-        # Restore attributes to self
-        for key, value in dataDict.items():
-            setattr(self, key, value)
-    
-        return self
 
     #------------------ Unified plotting ------------------#
     def plot_brightness_map(self, method=None, show_arrows=True):
@@ -733,12 +839,12 @@ class Flat(BrightifyModel):
         """
         data_filt = self.data_filter
         dir_D = np.array([v_x, v_y, v_z])
-        slice_filt_i = data_filt[fc.cosRR_f(data_filt[vel], dir_D) >= np.cos(theta_D)]
+        slice_filt_i = data_filt[fc.cosRR_f(data_filt[VELOCITY_NAMES_XYZ], dir_D) >= np.cos(theta_D)]
         self.window_weights = fc.sum_f(slice_filt_i.Wt)
         
         # Compute statistical uncertainty
-        Wt_sq_sum = fc.sum_f(self.data['Wt']**2)  # Global sum of squared weights
-        Am = np.mean(self.data['Wt']**2)  # Mean squared weight
+        Wt_sq_sum = fc.sum_f(self.data[WEIGHT_NAME]**2)  # Global sum of squared weights
+        Am = np.mean(self.data[WEIGHT_NAME]**2)  # Mean squared weight
         self.sigma = self.compute_sigma(slice_filt_i, Wt_sq_sum, Am, self.window_weights)
     
             # Calculate relative error
@@ -747,8 +853,6 @@ class Flat(BrightifyModel):
 #        dataDict = {'r_err': r_err, 'brightness': brightness, 'value_D': weight}
         return self.brightness, self.relative_error
 
-
- 
     def surface_crossing_all_surface(self, outputFile):
         """   
         Method to calculate surface crossing for the entire surface
@@ -764,18 +868,18 @@ class Flat(BrightifyModel):
         self.x_min, self.x_max = data_filt.x.min(), data_filt.x.max()
         self.y_min, self.y_max = data_filt.y.min(), data_filt.y.max()
         
-        Wt_sq_sum = fc.sum_f(self.data['Wt']**2)  # Global sum of squared weights
-        Am = np.mean(self.data['Wt']**2)  # Mean squared weight
+        Wt_sq_sum = fc.sum_f(self.data[WEIGHT_NAME]**2)  # Global sum of squared weights
+        Am = np.mean(self.data[WEIGHT_NAME]**2)  # Mean squared weight
         
         slice_i = data_filt
         self.total_neutrons = len(slice_i)
         self.total_weights = fc.sum_f(slice_i.Wt)
         self.total_mean = np.mean(slice_i.Wt)
         
-        self.mean_directions = fc.direction_f(fc.mean_f(slice_i[vel], slice_i.Wt))
+        self.mean_directions = fc.direction_f(fc.mean_f(slice_i[VELOCITY_NAMES_XYZ], slice_i.Wt))
         
         slice_filt_i = slice_i[
-            fc.cos_f(slice_i[vel], self.mean_directions) >= self.dir_window
+            fc.cos_f(slice_i[VELOCITY_NAMES_XYZ], self.mean_directions) >= self.dir_window
             ]
         self.window_weights = fc.sum_f(slice_filt_i.Wt)
         
@@ -783,16 +887,11 @@ class Flat(BrightifyModel):
     
             # Calculate relative error
         self.relative_error = self.r_err
-        
-        
-        keys = ('inputFile', 'primary_protons', 'pCurrent', 'dir_size',
-        'particle', 'energy', 'dir_window', 'total_neutrons', 'total_weights',
-        'window_weights', 'total_mean', 'relative_error', 'sigma', 'mean_directions'
-        )
-        
-        dataDict = {k: self.__dict__[k] for k in keys}
-        
-        with open(outputFile, 'wb') as f:
-            pkl.dump(dataDict, f)
+
+  
+        keys = ['sigma']
+        dataDict = self.save_model_dump(saveFile=outputFile, include_data=False, include_filter=False, only_return_dict=True, extra_keys=keys)
         
         return dataDict, self.brightness         
+
+# %%
