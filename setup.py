@@ -9,6 +9,10 @@ def read_version():
                 return line.split("=")[1].strip().strip("'\"")
     return "0.0.0" # (in case nothing is found)
 
+# Read the requirements.txt file
+with open("requirements.txt", encoding="utf-8") as f:
+    required = f.read().splitlines()
+
 setup(
     name='brightify',
     version=read_version(), # This reads __init__.py and its __version__ variable. If you want to update the version number, please do so in the __init__.py file.
@@ -18,13 +22,7 @@ setup(
     long_description_content_type='text/markdown',
     url='https://github.com/BrightnessTools/Brightify',
     packages=find_packages(),
-    install_requires=[
-        'numpy>=1.22',
-        'pandas>=1.4',
-        'matplotlib>=3.4',
-        'tqdm>=4.66',
-        'mcpl',
-    ],
+    install_requires=required,
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',  # adjust as needed

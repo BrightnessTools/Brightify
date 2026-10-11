@@ -13,6 +13,8 @@ import mcpl
 
 from brightify import fast_computation as fc
 
+
+FILE_ENDING = ".bfy"
 #%% Define particle types with their corresponding PDG codes
 PDG_CODES = {
     'proton': 2212,  # Proton PDG code
@@ -84,60 +86,6 @@ def read_data(inputFile, input_is_ascii=False):
     else: raise ValueError("input could not be interpreted") 
     return data  
 
-def read_model(dumpFile):
-    """
-    Reads previously saved model and returns a dictionary with attributes.
-    dumpFile is expected to be pickle dump of a dictionary with the model's attributes.
-    """
-    dumpFile = Path(dumpFile)
-    # this reads a previous dump of a model and returns the dictionary (does not change self object, and doesn't need it at all because it is static method)
-    print("previous Brightify model dump file is being read")
-    try:
-        with open(dumpFile, "rb") as f:
-            dataDict = pkl.load(f)
-    except Exception:
-        print("could not load file")
-    return dataDict
-
-def save_model(model, dumpFile):
-    """
-    Saves attributes of the model to dumpFile in the form of a dictionary in a pickle dump.
-    It is specified in the model methods ._get_save_keys() which attributes are saved.
-    
-    Returns the attribute dictionary.
-    """
-    dumpFile = Path(dumpFile)
-    attrDict = model.get_attr_dict()
-    # Save the data dictionary to a file
-    ending = ".bfy"
-    if isinstance(model, Flat):
-        ending += "-flat"
-    elif isinstance(model, Spherical):
-        ending += "-spherical"
-    dumpFile = dumpFile.with_suffix(str(dumpFile.suffix) + ending)
-    if dumpFile.exists():
-        raise FileExistsError("file was not written because it already exists at "+str(dumpFile))
-    try:
-        with open(dumpFile, "wb") as f:
-            pkl.dump(attrDict, f) 
-    except Exception:
-        print("File saving error")
-    print("A dump file of the model's attributes has been saved to "+str(dumpFile.resolve())+" and the following attributes were included: "
-            +str(list(attrDict.keys())).strip("[]"))
-    return attrDict
-
-def load_model(dumpFile, type="Flat"):
-    """
-    Returns a brightify model of specified type filled with from dumpFile
-    """
-    model = None
-    if type =="Flat":
-        model = Flat(outputFile=dumpFile)
-    elif type == "Spherical":
-        model = Spherical(outputFile=dumpFile)
-    else:
-        raise TypeError("Unsupported type hint")
-    return model
 
 #%%
 class BrightifyModel:
@@ -161,10 +109,13 @@ class BrightifyModel:
     # In general, any superclass thing can be called as "super().thing".
     # Note that the super class constructor should only contain parameters that all the sub-class constructors have in common.
     
+    # Constructor for new model
     def __init__(self, 
-                 inputFile=None, input_is_ascii=False,
+                 inputFile=None,
+                 input_is_ascii=False,
                  outputFile=None,
-                 primary_protons=None, pCurrent=None,   
+                 primary_protons=None,
+                 pCurrent=None,   
                  dir_size=None
                  ): 
         """
@@ -174,26 +125,30 @@ class BrightifyModel:
         - inputFile: Path to the input file containing particle data (optional). Default accepted format is .mcpl(.gz).
         - input_is_ascii: Whether you are using ascii input separated by whitespace instead of .mcpl(.gz) files. 
         - outputFile: Optional path to file in which previous BrightifyModel was saved (pickle dump of attributes).
+          Note: Please use Class.load_model(outputFile) instead
         - primary_protons: Number of primary protons (used for brightness calculation). Can be found in standard output file of MC code
         - pCurrent: Proton current (used for brightness calculation).
         - dir_size: Size of the solid-angle window (in steradians) around the direction used for brightness calculation
         """
 
+        # --- -1. specify attr. to be saved if save method is called ---
+        
+        self.save_keys = ['inputFile',
+                          'input_is_ascii',
+                          'primary_protons',
+                          'pCurrent',
+                          'dir_size']
+        # write all those attribute names that this object might obtain,
+        # but no need for those from the child classes.
+        # We just update it there.
 
-        # --- 0. catch case where user gives a dump file ---
-
+        # --- 0. catch (deprecated) case where user gives a dump file ---
         
         if outputFile is not None:
-            outputFile=Path(outputFile)
-            if not outputFile.exists(): raise ValueError("outputFile path does not exist")
-            else: # Loads previously saved model dump
-                attrDict = read_model(dumpFile=outputFile)
-                self._set_attributes(attrDict=attrDict)
-                return # THIS ENDS THE CONSTRUCTOR CALL HERE
+            raise ValueError("outputFile cannot be used here. Please use the class method load_model(outputFile) instead")
         self.outputFile = outputFile
 
-
-        # --- 1. Assigning simple variables ---
+        # --- 1. Assign simple variables ---
 
         # inputFile
         if inputFile is not None:
@@ -221,57 +176,73 @@ class BrightifyModel:
         except (ValueError, TypeError): raise ValueError("dir_size must be float-convertible")
         self.dir_size = dir_size
 
-
         # --- 2. Data loading ---
 
         # this needs to be a pandas DataFrame
         self.data = read_data(inputFile=self.inputFile, input_is_ascii=self.input_is_ascii)
              
-
         # --- 3 Filter initialization ---
         
         # Reset filter to include all data initially    
         self.reset_filter()
 
-
-    def _get_save_keys(self):
-        # This method should be implemented by each subclass.
-        # There, make sure it returns the names of the variables that shall be included in the save of that subclass-object.
-        # if it is not implemented, here we just return an empty list as substitute.
-        print("an empty list of things to save has been passed from your object to the save method")
-        return list()
-
-    def get_attributes(self):
+    # alternatively construct object of model from saved dump
+    @classmethod
+    def load_model(cls, dumpFile, enforce_type=False):
         """
-            Returns a dictionary of a model's attributes.
-            
-            Returns
-            -------
-            Dictionary containing those attributes (names and values) that are mentioned at model._get_save_keys().
-        """     
-        super_keys = ['inputFile',
-                        'primary_protons',
-                        'pCurrent',
-                        'dir_size'] # These are variables of the super-class that automatically considered to be saved.
-        sub_keys = self._get_save_keys() # get keys that are specified in the sub-class implementations of _get_save_keys()
-        all_keys = super_keys + sub_keys
-        active_keys = [k for k in all_keys if hasattr(self, k)] # filter to exclude those that the object doesnt have.
-        attrDict = {k: getattr(self, k) for k in active_keys}
+        Reads previously saved model and returns it.
+        By default, the returned model is of the type that is saved in the file.
+        If you set enforce_type == True, then the type is the class from which you called this method.
+        """
+        # This is a sort of alternative constructor.
+        dumpFile = Path(dumpFile)
+        # this reads a previous dump of a model and returns the dictionary (does not change self object, and doesn't need it at all because it is static method)
+        print("previous Brightify model dump file is being read")
+        try:
+            with open(dumpFile, "rb") as f:
+                (modelType, attrDict) = pkl.load(f)
+        except Exception:
+            print("could not load dump")
+        modelType = cls if enforce_type else modelType
+        model = modelType.__new__(modelType)
+        model.__dict__.update(attrDict)
+        return model
+
+    def _get_save_attributes(self):
+        """
+        Returns a dictionary of those attributes that are included when saving.
+        """
+        _MISSING_ATTR = object()
+        keys = list(dict.fromkeys(self.save_keys))
+        attrDict = {k:val for k in keys if (val := getattr(self, k ,_MISSING_ATTR)) is not _MISSING_ATTR}
         return attrDict
 
-    def _set_attributes(self, attrDict):
-        # this sets attributes of the self object with the attrDict containing the attribute names and data
-        for k,v in attrDict.items():
-            setattr(self, k, v)
-        print("the following attributes/variables were set: "
-              +str(list(attrDict.keys())).strip("[]"))
-        
+    def save_model(self, dumpFile):
+        """
+        Saves model to dumpFile (pickle dump).
+        The dumped object is a tuple: (type-of-model, dictionary-of-attributes).
+        """
+        dumpFile = Path(dumpFile)
+        # Prepare file path
+        dumpFile = dumpFile.with_suffix(str(dumpFile.suffix) + FILE_ENDING)
+        if dumpFile.exists():
+            raise FileExistsError("file was not written because it already exists at "+str(dumpFile))
+        # get attributes and type and save tuple (type, dictionary) to the location
+        modelType = type(self)
+        attrDict = self._get_save_attributes()
+        save_tuple = (modelType, attrDict)
+        try:
+            with open(dumpFile, "wb") as f:
+                pkl.dump(save_tuple, f) 
+        except Exception:
+            print("File saving error")
+        print("A dump file of the model's attributes has been saved to "+str(dumpFile.resolve())+" and the following attributes were included: "
+                +str(list(attrDict.keys())).strip("[]"))
 
     # def coordinate_transform(self):
     #     - coordinate_system: This program expects the z coordinate direction to be the normal direction of the brightness maps. \
     #                 You may want to transform your data beforehand yourself, or input here three Euler angles (alpha, beta, gamma) (in degrees).
     #                 alpha determines how much the x axis needs to be 
-
     
     @property
     def data_filter(self):
@@ -493,148 +464,8 @@ class BrightifyModel:
             self.mean_directions_window[i] = self.mean_directions[i] * self.window_weights[i]
 
 
-
-class Spherical(BrightifyModel):
-    def __init__(self, 
-                 inputFile=None, input_is_ascii=False,
-                 outputFile=None,
-                 primary_protons=None, pCurrent=None,
-                 dir_size=None, 
-                 pos_size=None,
-                 radius=None,
-                 spiral_points=None):
-        """
-        Initialize the Spherical model, which is a subclass of BrightifyModel.
-        
-        Parameters (in addition to BrightifyModel() Parameters)
-        ----------
-        - pos_size: position window size.
-        - radius: radius of the spherical shell of the dump source defined by user.
-        - spiral_points: number of points for spiral scan.
-
-        Returns
-        -------
-        None.
-
-        """
-        # --- 0. Initialize via the parent class (BrightifyModel) constructor with relevant arguments ---
-        super().__init__(inputFile=inputFile, input_is_ascii=input_is_ascii,
-                         outputFile=outputFile,
-                         primary_protons=primary_protons, pCurrent=pCurrent,
-                         dir_size=dir_size)
-
-        # --- 1. Assigning simple variables --- 
-
-        # pos_size
-        try: pos_size = float(pos_size)
-        except (ValueError, TypeError): raise ValueError("pos_size must be float-convertible")
-        self.pos_size = pos_size
-
-        # radius
-        try: radius = float(radius)
-        except (ValueError, TypeError): raise ValueError("radius must be float-convertible")
-        self.radius = radius
-
-        # spiral_points
-        try: spiral_points = int(spiral_points)
-        except (ValueError, TypeError): raise ValueError("spiral_points must be int-convertible")
-        self.spiral_points = spiral_points
-
-        # --- 2. Spiral generation ---
-        self.spiral = Spherical.spiral_scan(spiral_points)
-              
-    def spherical_filter_func(self, data_filt, vec):
-        """
-        Filtering function specific to the Spherical subclass. 
-        It filters `slice_i` based on the cosine of the angle between `vec` and `data_filt`.
-        """
-        return data_filt[fc.cos_f(data_filt[POSITION_NAMES_XYZ], vec) > self.pos_window]
-
-    def calculate(self):
-        data_filt = self.data_filter
-        self.pos_window = 1 - self.pos_size / (2 * np.pi * self.radius**2)  # Position window
-        self.dir_window = 1 - self.dir_size / (2 * np.pi)  # Direction window (d(omega) = dS/r^2)
-    
-        return self.calculate_properties(data_filt, self.spiral.shape[0],
-                                          self.spiral.shape,
-                                          self.spherical_filter_func,
-                                          self.spiral)            
-       
-    def spiral_scan(spiral_points):
-        """
-        This function generates a spiral scan based on the golden spiral pattern.
-        
-        Parameters
-        ----------
-        spiral_points : int
-            The number of points for the spiral scan.
-        
-        Returns
-        -------
-        np.ndarray
-            An array of coordinates representing the points of the spiral in spherical coordinates (theta, phi).
-        """
-        assert type(int(spiral_points)) == int
-        
-        # Generate the spiral angles (theta, phi) based on the golden spiral pattern
-        indices = np.arange(0, spiral_points, dtype=np.float64) + 0.5
-        spiral_theta = np.arccos(1 - 2 * indices / spiral_points)
-        spiral_phi = np.pi * (1 + 5**0.5) * indices
-        
-        # Convert the spherical coordinates (theta, phi) to Cartesian coordinates
-        return fc.spher2cart(1, spiral_theta, spiral_phi)
-    
-    def plot(self):
-        """
-        Plots a 3D brightness map of the spherical shell.
-        """
-        
-        ax = plt.figure().add_subplot(111, projection='3d')
-        sc = ax.scatter(
-            self.spiral[:,2], self.spiral[:,1], self.spiral[:,0],
-            c=self.brightness, cmap=plt.cm.magma, vmin=0 #c=self.window_weights
-            )
-        ax.quiver(0, 0, 0, 1, 0, 0, color='r', length=1.0, normalize=True)
-        ax.text(1.5, 0, 0, "Z", color='r')
-        ax.quiver(0, 0, 0, 0, 1, 0, color='g', length=1.0, normalize=True)
-        ax.text(0, 1.5, 0, "Y", color='g')
-        ax.quiver(0, 0, 0, 0, 0, 1, color='b', length=1.0, normalize=True)
-        ax.text(0, 0, 1.5, "X", color='b')
-        ax.quiver(
-            self.spiral[:,2], self.spiral[:,1], self.spiral[:,0], 
-            self.mean_directions_window[:,2],
-            self.mean_directions_window[:,1],
-            self.mean_directions_window[:,0],
-            length=0.0001
-            )
-        plt.colorbar(sc, ax=ax)
-
-    def _get_save_keys(self):
-        # Specify the keys of the attributes to save
-        return ['inputFile', 'primary_protons', 'pCurrent', 'pos_size', 'dir_size',
-                'particle', 'energy', 'radius', 'spiral_points', 'spiral',
-                'pos_window', 'dir_window', 'total_neutrons', 'total_weights',
-                'window_weights', 'total_mean', 'relative_error', 'mean_directions',
-                'mean_directions_window']
-        
-    def summary(self):
-        """
-        Returns a summary of the results of the spherical scan.
-        
-        Returns
-        -------
-        dict
-            A dictionary containing spiral points, mean directions, and brightness.
-        """
-        summaryDict = {
-            'spiral': [*self.spiral],
-            'mean_directions': [*self.mean_directions],
-            'brightness': [*self.brightness]
-            }
-        return summaryDict
-        
-    
 class Flat(BrightifyModel):
+    
     def __init__(self, inputFile=None, input_is_ascii=False,
                  outputFile=None,
                  primary_protons=None, pCurrent=None, 
@@ -654,22 +485,32 @@ class Flat(BrightifyModel):
                          primary_protons=primary_protons, pCurrent=pCurrent, 
                          dir_size=dir_size)
 
+        # --- 0.5 add names to list to be saved ---
+        
+        self.save_keys = self.save_keys + ['pos_size_x', 'pos_size_y', 'pos_size',
+                        'particle', 'energy', 'dir_window', 'x_range', 'y_range',
+                        'x_mesh', 'y_mesh', 'z_mesh', 'total_neutrons', 'total_weights',
+                        'window_weights', 'total_mean', 'relative_error', 'sigma']
+        # for the case method == "mean":
+        self.save_keys.extend(['mean_directions', 'mean_directions_window',
+                             'mean_directions_spher'])
+        # for the case method == "adaptive":
+        self.save_keys.extend(['mean_directions','mean_directions_spher','adaptive_dir',
+                             'adaptive_dir_spher', 'hist','hist_edges'])
+
         # --- 1. Initialize position window variables ---
         
         # pos_size_x
-        if not hasattr(self, 'pos_size_x'): # because super constructor might have filled already if dump was imported
-            try: pos_size_x = float(pos_size_x)
-            except (ValueError, TypeError): raise ValueError("pos_size_x must be float-convertible")
-            self.pos_size_x = pos_size_x
+        try: pos_size_x = float(pos_size_x)
+        except (ValueError, TypeError): raise ValueError("pos_size_x must be float-convertible")
+        self.pos_size_x = pos_size_x
 
         # pos_size_y
-        if not hasattr(self, 'pos_size_y'):
-            try: pos_size_y = float(pos_size_y)
-            except (ValueError, TypeError): raise ValueError("pos_size_y must be float-convertible")
-            self.pos_size_y = pos_size_y
+        try: pos_size_y = float(pos_size_y)
+        except (ValueError, TypeError): raise ValueError("pos_size_y must be float-convertible")
+        self.pos_size_y = pos_size_y
 
-        if not hasattr(self, 'pos_size'):
-            self.pos_size = pos_size_x * pos_size_y
+        self.pos_size = pos_size_x * pos_size_y
 
     #------------------ Helper: prepare meshgrid ------------------#
     def prepare_vectors(self):
@@ -731,22 +572,6 @@ class Flat(BrightifyModel):
             )
         else:
             raise ValueError(f"Unknown calculation method: {method}")
-
-    #------------------   save data   --------------------#
-    def _get_save_keys(self):
-        keys = ['inputFile', 'primary_protons', 'pCurrent', 
-                'pos_size_x', 'pos_size_y', 'pos_size', 'dir_size',
-                'particle', 'energy', 'dir_window', 'x_range', 'y_range',
-                'x_mesh', 'y_mesh', 'z_mesh', 'total_neutrons', 'total_weights',
-                'window_weights', 'total_mean', 'relative_error', 'sigma']
-        # for the case method == "mean":
-        keys.extend(['mean_directions', 'mean_directions_window',
-                     'mean_directions_spher'])
-        # for the case method == "adaptive":
-        keys.extend(['mean_directions','mean_directions_spher','adaptive_dir',
-                     'adaptive_dir_spher', 'hist','hist_edges'])
-        return keys
-
 
     #------------------ Unified plotting ------------------#
     def plot_brightness_map(self, method=None, show_arrows=True):
@@ -896,10 +721,9 @@ class Flat(BrightifyModel):
             # Calculate relative error
         self.relative_error = self.r_err
 
-#        dataDict = {'r_err': r_err, 'brightness': brightness, 'value_D': weight}
         return self.brightness, self.relative_error
 
-    def surface_crossing_all_surface(self, outputFile):
+    def surface_crossing_all_surface(self):
         """   
         Method to calculate surface crossing for the entire surface
         w.r.t mean direction
@@ -937,4 +761,149 @@ class Flat(BrightifyModel):
   
         return self.brightness         
 
-# %%
+
+class Spherical(BrightifyModel):
+    
+    def __init__(self, 
+                 inputFile=None, input_is_ascii=False,
+                 outputFile=None,
+                 primary_protons=None, pCurrent=None,
+                 dir_size=None, 
+                 pos_size=None,
+                 radius=None,
+                 spiral_points=None):
+        """
+        Initialize the Spherical model, which is a subclass of BrightifyModel.
+        
+        Parameters (in addition to BrightifyModel() Parameters)
+        ----------
+        - pos_size: position window size.
+        - radius: radius of the spherical shell of the dump source defined by user.
+        - spiral_points: number of points for spiral scan.
+
+        Returns
+        -------
+        None.
+
+        """
+        # --- 0. Initialize via the parent class (BrightifyModel) constructor with relevant arguments ---
+        super().__init__(inputFile=inputFile, input_is_ascii=input_is_ascii,
+                         outputFile=outputFile,
+                         primary_protons=primary_protons, pCurrent=pCurrent,
+                         dir_size=dir_size)
+
+
+        # --- 0.5.  write here all the variables that the object might obtain --
+        # after running some methods,
+        # and that are supposed to be saved when saving the model.
+        # We add those that the super() constructor has already initialized.
+        self.save_keys = self.save_keys + ['pos_size',
+                        'particle', 'energy', 'radius', 'spiral_points', 'spiral',
+                        'pos_window', 'dir_window', 'total_neutrons', 'total_weights',
+                        'window_weights', 'total_mean', 'relative_error', 'mean_directions',
+                        'mean_directions_window'] 
+
+        # --- 1. Assigning simple variables --- 
+
+        # pos_size
+        try: pos_size = float(pos_size)
+        except (ValueError, TypeError): raise ValueError("pos_size must be float-convertible")
+        self.pos_size = pos_size
+
+        # radius
+        try: radius = float(radius)
+        except (ValueError, TypeError): raise ValueError("radius must be float-convertible")
+        self.radius = radius
+
+        # spiral_points
+        try: spiral_points = int(spiral_points)
+        except (ValueError, TypeError): raise ValueError("spiral_points must be int-convertible")
+        self.spiral_points = spiral_points
+
+        # --- 2. Spiral generation ---
+        self.spiral = Spherical.spiral_scan(spiral_points)
+              
+    def spherical_filter_func(self, data_filt, vec):
+        """
+        Filtering function specific to the Spherical subclass. 
+        It filters `slice_i` based on the cosine of the angle between `vec` and `data_filt`.
+        """
+        return data_filt[fc.cos_f(data_filt[POSITION_NAMES_XYZ], vec) > self.pos_window]
+
+    def calculate(self):
+        data_filt = self.data_filter
+        self.pos_window = 1 - self.pos_size / (2 * np.pi * self.radius**2)  # Position window
+        self.dir_window = 1 - self.dir_size / (2 * np.pi)  # Direction window (d(omega) = dS/r^2)
+    
+        return self.calculate_properties(data_filt, self.spiral.shape[0],
+                                          self.spiral.shape,
+                                          self.spherical_filter_func,
+                                          self.spiral)            
+
+    @staticmethod
+    def spiral_scan(spiral_points):
+        """
+        This function generates a spiral scan based on the golden spiral pattern.
+        
+        Parameters
+        ----------
+        spiral_points : int
+            The number of points for the spiral scan.
+        
+        Returns
+        -------
+        np.ndarray
+            An array of coordinates representing the points of the spiral in spherical coordinates (theta, phi).
+        """
+        assert type(int(spiral_points)) == int
+        
+        # Generate the spiral angles (theta, phi) based on the golden spiral pattern
+        indices = np.arange(0, spiral_points, dtype=np.float64) + 0.5
+        spiral_theta = np.arccos(1 - 2 * indices / spiral_points)
+        spiral_phi = np.pi * (1 + 5**0.5) * indices
+        
+        # Convert the spherical coordinates (theta, phi) to Cartesian coordinates
+        return fc.spher2cart(1, spiral_theta, spiral_phi)
+    
+    def plot(self):
+        """
+        Plots a 3D brightness map of the spherical shell.
+        """
+        
+        ax = plt.figure().add_subplot(111, projection='3d')
+        sc = ax.scatter(
+            self.spiral[:,2], self.spiral[:,1], self.spiral[:,0],
+            c=self.brightness, cmap=plt.cm.magma, vmin=0 #c=self.window_weights
+            )
+        ax.quiver(0, 0, 0, 1, 0, 0, color='r', length=1.0, normalize=True)
+        ax.text(1.5, 0, 0, "Z", color='r')
+        ax.quiver(0, 0, 0, 0, 1, 0, color='g', length=1.0, normalize=True)
+        ax.text(0, 1.5, 0, "Y", color='g')
+        ax.quiver(0, 0, 0, 0, 0, 1, color='b', length=1.0, normalize=True)
+        ax.text(0, 0, 1.5, "X", color='b')
+        ax.quiver(
+            self.spiral[:,2], self.spiral[:,1], self.spiral[:,0], 
+            self.mean_directions_window[:,2],
+            self.mean_directions_window[:,1],
+            self.mean_directions_window[:,0],
+            length=0.0001
+            )
+        plt.colorbar(sc, ax=ax)
+
+    def summary(self):
+        """
+        Returns a summary of the results of the spherical scan.
+        
+        Returns
+        -------
+        dict
+            A dictionary containing spiral points, mean directions, and brightness.
+        """
+        summaryDict = {
+            'spiral': [*self.spiral],
+            'mean_directions': [*self.mean_directions],
+            'brightness': [*self.brightness]
+            }
+        return summaryDict
+        
+    

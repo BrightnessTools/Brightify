@@ -22,7 +22,6 @@ Brightify_folder_path = examples_folder_path.parent
 
 # enter paths relative to the top folder "Brightify" that contains the examples folder
 
-# path = './test.mcpl.gz'
 path = './examples/uniform/output.mcpl.gz'
 # path = './examples/Brightify Fig 6/Fig6a/output.mcpl.gz' # The number of primary particles is 4.7e7 and the resolution is 1 cm2 and 0.006 sr, based on the paper 
 # path = './examples/Brightify Fig 6/Fig6a/output.mcpl.gz' # The number of primary particles is 4.7e7 and the resolution is 1 cm2 and 0.006 sr, based on the paper 
@@ -38,10 +37,7 @@ print("valid path: "+str(path) if path.exists() else "unvalid path: "+str(path))
 #%%
 import brightify as bfy
 
-flatModel = bfy.load_model("tessst.bfy-flat", "Flat")
-
-# import brightify
-# print(brightify.main.ENERGY_NAME)
+print(bfy.main.ENERGY_NAME)
 
 #%%
 flatModel = bfy.Flat(
@@ -52,14 +48,17 @@ flatModel = bfy.Flat(
     pos_size_y = 1.0, # in cm
     dir_size = 6e-3 # in sr (steradians)
     )
+
 #%%
 flatModel.apply_filter(
     particle = 'neutron',
     energy = (0.0, 2.0),
     )
-
+#%%
 flatModel.calculate()
-
+#%%
 flatModel.plot_brightness_map()
-
+#%%
 flatModel.plot_error_map()
+
+# %%
