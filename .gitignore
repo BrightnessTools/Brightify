@@ -172,3 +172,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# VS Code
+.vscode/
+
+# (Compressed) MCPL Data files
+.mcpl.gz
+.mcpl

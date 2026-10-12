@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+#%%
 import pandas as pd
 import numpy as np
 from os import path
@@ -8,11 +9,11 @@ import pickle as pkl
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import mcpl
-from . import FastComputation as fc
+from brightify import fast_computation as fc
 
 
 #%% Define particle types with their corresponding PDG codes
-Particle = {
+PARTICLE = {
     'proton': 2212,  # Proton PDG code
     'neutron': 2112,  # Neutron PDG code
     'photon': 22,  # Photon PDG code
@@ -167,7 +168,7 @@ class BrightifyModel:
         # If a particle type is specified, filter by the particle's PDG code
         if particle:
             self.particle = particle
-            self.filter &= (self.data['Kf'] == Particle[particle])
+            self.filter &= (self.data['Kf'] == PARTICLE[particle])
         
         # If an energy range is specified, filter particles within that range
         if energy:

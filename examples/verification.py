@@ -3,7 +3,7 @@
 
 path = './examples/uniform/'
 
-from Brightify import Flat
+from brightify import Flat
 
 flatModel = Flat(
     inputFile= path +'output.mcpl.gz',
