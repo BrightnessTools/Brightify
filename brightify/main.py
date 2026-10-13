@@ -107,7 +107,7 @@ class BrightifyModel:
     # Note that the super class constructor should only contain parameters that all the sub-class constructors have in common.
     
     
-    #  ---- 1. Object creation logic ----
+    #  ----- 1. Object creation logic -----
 
     # Classical constructor
     def __init__(self, 
@@ -191,7 +191,7 @@ class BrightifyModel:
         # It is a class method, meaning it can be called as Class.method (e.g. Flat.load_model())
         dumpFile = Path(dumpFile).resolve()
         if not dumpFile.suffix == FILE_ENDING:
-            print("Provided file does not have the expected file extension. Looking for intended file...")
+            print("Provided file does not have the expected file extension '"+FILE_ENDING+"'. Looking for intended file...")
             dumpFile = dumpFile.with_suffix(FILE_ENDING)
         # this reads a previous dump of a model and returns the dictionary (does not change self object, and doesn't need it at all because it is static method)
         if not dumpFile.exists():
@@ -279,6 +279,7 @@ class BrightifyModel:
         print("A dump file of the model of type "+self.__class__.__name__+" has been saved to "+str(dumpFile)
               +" and the following attributes were included: "+str(list(attrDict.keys())).strip("[]"))
 
+    # ----- 3. Calculations logic -----
 
     # def coordinate_transform(self):
     #     - coordinate_system: This program expects the z coordinate direction to be the normal direction of the brightness maps. \
@@ -286,7 +287,7 @@ class BrightifyModel:
     #                 alpha determines how much the x axis needs to be 
     
     @property
-    def data_filter(self):
+    def data_filtered(self):
         """
         Property method to return filtered data based on the current filter
         Returns the data that matches the current filter conditions.
@@ -418,7 +419,7 @@ class BrightifyModel:
             self.window_weights[i] = fc.sum_f(slice_filt_i.Wt)
     
             # Sigma and relative error
-            self.sigma[i] = self.compute_sigma(slice_filt_i, Wt_sq_sum, Am, self.window_weights[i])
+            self.sigma[i] = self.compute_sigma(slice_filt_i=slice_filt_i, Wt_sq_sum=Wt_sq_sum, Am=Am, window_weight=self.window_weights[i])
             self.relative_error[i] = self.r_err[i]
     
             # Weighted direction
@@ -510,7 +511,7 @@ class BrightifyModel:
             self.window_weights[i] = fc.sum_f(slice_filt_i.Wt)
     
             # Sigma and weighted mean direction
-            self.sigma[i] = self.compute_sigma(slice_filt_i, Wt_sq_sum, Am, self.window_weights[i])
+            self.sigma[i] = self.compute_sigma(slice_filt_i=slice_filt_i, Wt_sq_sum=Wt_sq_sum, Am=Am, window_weight=self.window_weights[i])
             self.relative_error[i] = self.r_err[i]
             self.mean_directions_window[i] = self.mean_directions[i] * self.window_weights[i]
 
@@ -578,7 +579,7 @@ class Spherical(BrightifyModel):
         self.spiral_points = spiral_points
 
         # --- 2. Spiral generation ---
-        self.spiral = Spherical.spiral_scan(spiral_points)
+        self.spiral = Spherical.spiral_scan(spiral_points=spiral_points)
               
     def spherical_filter_func(self, data_filt, vec):
         """
@@ -588,14 +589,14 @@ class Spherical(BrightifyModel):
         return data_filt[fc.cos_f(data_filt[POSITION_NAMES_XYZ], vec) > self.pos_window]
 
     def calculate(self):
-        data_filt = self.data_filter
+        data_filt = self.data_filtered
         self.pos_window = 1 - self.pos_size / (2 * np.pi * self.radius**2)  # Position window
         self.dir_window = 1 - self.dir_size / (2 * np.pi)  # Direction window (d(omega) = dS/r^2)
     
-        return self.calculate_properties(data_filt, self.spiral.shape[0],
-                                          self.spiral.shape,
-                                          self.spherical_filter_func,
-                                          self.spiral)            
+        return self.calculate_properties(data_filt=data_filt, shape1D=self.spiral.shape[0],
+                                          shape2D=self.spiral.shape,
+                                          slice_filter_func=self.spherical_filter_func,
+                                          points=self.spiral)            
 
     @staticmethod
     def spiral_scan(spiral_points):
@@ -721,7 +722,7 @@ class Flat(BrightifyModel):
 
     #------------------ Helper: prepare meshgrid ------------------#
     def prepare_vectors(self):
-        data_filt = self.data_filter
+        data_filt = self.data_filtered
         self.x_min, self.x_max = data_filt.x.min(), data_filt.x.max()
         self.y_min, self.y_max = data_filt.y.min(), data_filt.y.max()
         self.x_range = np.arange(self.x_min, self.x_max + 1, self.pos_size_x/4)
@@ -745,36 +746,36 @@ class Flat(BrightifyModel):
         
         method: "mean", "adaptive", or "normal"
         """
-        data_filt = self.data_filter
+        data_filt = self.data_filtered
         self.dir_window = 1 - self.dir_size / (2 * np.pi)
         self.prepare_vectors()
         result = None
         if method == "mean":
             result = self.calculate_properties(
-                data_filt,
-                self.vectors.shape[0],
-                self.vectors.shape,
-                self.flat_filter_func,
-                self.vectors
+                data_filt=data_filt,
+                shape1D=self.vectors.shape[0],
+                shape2D=self.vectors.shape,
+                slice_filter_func=self.flat_filter_func,
+                points=self.vectors
             )
         elif method == "adaptive":
             result = self.calculate_properties_adaptive(
-                data_filt,
-                self.vectors.shape[0],
-                self.vectors.shape,
-                self.flat_filter_func,
-                self.vectors,
-                bins_cart,
-                threshold_frac
+                data_filt=data_filt,
+                shape1D=self.vectors.shape[0],
+                shape2D=self.vectors.shape,
+                slice_filter_func=self.flat_filter_func,
+                points=self.vectors,
+                bins_cart=bins_cart,
+                threshold_frac=threshold_frac
             )
         elif method == "normal":
             # Use forced surface-normal direction
             result = self.calculate_properties(
-                data_filt,
-                self.vectors.shape[0],
-                self.vectors.shape,
-                self.flat_filter_func,
-                self.vectors,
+                data_filt=data_filt,
+                shape1D=self.vectors.shape[0],
+                shape2D=self.vectors.shape,
+                slice_filter_func=self.flat_filter_func,
+                points=self.vectors,
                 forced_direction=np.array([0,0,1])
             )
         else:
@@ -906,7 +907,7 @@ class Flat(BrightifyModel):
         w.r.t a given direction
         
         """
-        data_filt = self.data_filter
+        data_filt = self.data_filtered
         dir_D = np.array([v_x, v_y, v_z])
         slice_filt_i = data_filt[fc.cosRR_f(data_filt[VELOCITY_NAMES_XYZ], dir_D) >= np.cos(theta_D)]
         self.window_weights = fc.sum_f(slice_filt_i.Wt)
@@ -914,7 +915,7 @@ class Flat(BrightifyModel):
         # Compute statistical uncertainty
         Wt_sq_sum = fc.sum_f(self.data[WEIGHT_NAME]**2)  # Global sum of squared weights
         Am = np.mean(self.data[WEIGHT_NAME]**2)  # Mean squared weight
-        self.sigma = self.compute_sigma(slice_filt_i, Wt_sq_sum, Am, self.window_weights)
+        self.sigma = self.compute_sigma(slice_filt_i=slice_filt_i, Wt_sq_sum=Wt_sq_sum, Am=Am, window_weight=self.window_weights)
     
             # Calculate relative error
         self.relative_error = self.r_err
@@ -927,7 +928,7 @@ class Flat(BrightifyModel):
         w.r.t mean direction
         
         """
-        data_filt = self.data_filter
+        data_filt = self.data_filtered
         
         # d(omega) = dS/r^2 = 3*6*1e-4/10^2 = 0.18
         self.dir_window = 1 - self.dir_size / (2 * np.pi)
@@ -951,7 +952,7 @@ class Flat(BrightifyModel):
             ]
         self.window_weights = fc.sum_f(slice_filt_i.Wt)
         
-        self.sigma = self.compute_sigma(slice_i, Wt_sq_sum, Am, self.window_weights)
+        self.sigma = self.compute_sigma(slice_filt_i=slice_i, Wt_sq_sum=Wt_sq_sum, Am=Am, window_weight=self.window_weights)
     
             # Calculate relative error
         self.relative_error = self.r_err
