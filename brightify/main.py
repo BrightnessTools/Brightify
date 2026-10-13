@@ -559,6 +559,10 @@ class Spherical(BrightifyModel):
             length=0.0001
             )
         fig.colorbar(sc, ax=ax)
+        if hasattr(self, "rotation"):
+            print("Attention: This plot is displaying data in new coordinates compared to the input data. \
+                    The input data was transformed by applying the following rotation matrix R in the sense `R * (x,y,z)^T` (column vectors):\n"
+                    +str(self.rotation))
         return fig, ax
 
 
@@ -957,6 +961,10 @@ class Flat(BrightifyModel):
         fig, ax
             The Matplotlib figure and axes for further customization.
         """
+        if hasattr(self, "rotation"):
+            print("Attention: This plot is displaying data in new coordinates compared to the input data. \
+                The input data was transformed by applying the following rotation matrix R in the sense `R * (x,y,z)^T` (column vectors):\n"
+                +str(self.rotation))
         return self._plot_flat_map(self.brightness,
                                    'brightness [n/s/cm$^2$/sr]',
                                    method, show_arrows, figsize, square_axes,
@@ -976,6 +984,10 @@ class Flat(BrightifyModel):
         fig, ax
             The Matplotlib figure and axes for further customization.
         """
+        if hasattr(self, "rotation"):
+            print("Attention: This plot is displaying data in new coordinates compared to the input data. \
+                The input data was transformed by applying the following rotation matrix R in the sense `R * (x,y,z)^T` (column vectors):\n"
+                +str(self.rotation))
         return self._plot_flat_map(self.relative_error, 'relative error',
                                    method, show_arrows, figsize, square_axes,
                                    arrow_scale)
