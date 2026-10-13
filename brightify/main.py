@@ -106,8 +106,57 @@ class BrightifyModel:
             
             for k,v in dataDict.items():
                 self.__dict__[k] = v
-        
-        
+
+    def rotate(self, z_vector=[0,0,1], x_vector=[1,0,0], undo_all=False, apply_self=False):
+        """
+        Rotates the coordinate system of self.data such that:
+        - z_vector ([x,y,z]): Its direction is the Z-axis in the new data. This is required for 2D models like Flat which need Z to be the normal direction.
+        - x_vector ([x,y,z]): Its projection onto the new X-Y-plane is the new X-axis.
+        - undo_all: set True if you want to undo all previously applied rotations. (Overrides all other parameters)
+        - apply_self: set True if you want to apply self.rotation (e.g. after reloading a model from disk and loading in the original data separately). (Overrides the two vector parameters)
+        """
+        # this relies on self.rotation
+        if undo_all:
+            if not hasattr(self, "rotation"):
+                print("nothing to undo")
+                return
+            self.data.loc[:, pos] = self.data[pos].values @ self.rotation
+            self.data.loc[:, vel] = self.data[vel].values @ self.rotation
+            del self.rotation
+            return
+        elif apply_self:
+            if not hasattr(self, "rotation"):
+                print("self.rotation not found")
+                return
+            self.data.loc[:, pos] = self.data[pos].values @ self.rotation.T
+            self.data.loc[:, vel] = self.data[vel].values @ self.rotation.T
+            return
+        else:
+            # 1. Define the new Z-axis from the normal vector
+            z_new = np.array(z_vector, dtype=float)
+            z_new /= np.linalg.norm(z_new)
+            # 2. Define the new X-axis using the reference vector
+            ref = np.array(x_vector, dtype=float)
+            ref /= np.linalg.norm(ref)
+            # If the magnitude of the cross product is nearly zero, they are parallel
+            if np.linalg.norm(np.cross(z_new, ref)) < 1e-6:
+                raise ValueError("The reference vector cannot be parallel to the normal vector.")
+            # Remove any component of ref that points along z_new (Gram-Schmidt orthogonalization)
+            x_new = ref - np.dot(ref, z_new) * z_new
+            x_new /= np.linalg.norm(x_new)
+            # 3. Complete the right-handed coordinate system by finding the new Y-axis
+            y_new = np.cross(z_new, x_new)
+            # 4. Construct the rotation matrix (where each row is one of the new axes)
+            R = np.vstack([x_new, y_new, z_new])
+            # 5. Apply the TRANSPOSE of the rotation to position and velocity columns
+            self.data.loc[:, pos] = self.data[pos].values @ R.T
+            self.data.loc[:, vel] = self.data[vel].values @ R.T
+            # store/update rotation
+            if hasattr(self, "rotation"):
+                self.rotation = R @ self.rotation
+            else:
+                self.rotation = R
+
     @property
     def data_filter(self):
         """
