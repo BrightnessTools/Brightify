@@ -71,7 +71,7 @@ flatModel.apply_filter(
 # (That works because the apply_filter method is cumulative (a "monotonic filter"). To reset, use "reset_filter()")
 #%%
 # make a calculation and save the result
-flatModel.calculate(method="mean")
+flatModel.calculate()
 flatModel.save_model(dumpFile="test", overwrite=True, include_filter=False, include_data=False)
 # note that files are saved with the ".bfy" extension (but you can leave it out in the argument)
 #%%

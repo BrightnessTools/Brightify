@@ -25,17 +25,15 @@ PDG_CODES = {
 }
 
 #%% List of column names for different types of data (position, velocity, etc.)
-# These will be used to organize and access particle data
+# These will be used to organize and access particle data (The imported data in the form of dataframe will get these column labels).
 PDG_CODE_NAME = 'Kf'
 ENERGY_NAME = 'e'
 WEIGHT_NAME = 'Wt'
-POSITION_NAME_X, POSITION_NAME_Y, POSITION_NAME_Z = 'x', 'y', 'z'
-POSITION_NAMES_XYZ = [POSITION_NAME_X, POSITION_NAME_Y, POSITION_NAME_Z] # Position components (x, y, z)
-VELOCITY_NAME_X, VELOCITY_NAME_Y, VELOCITY_NAME_Z = 'Vx', 'Vy', 'Vz'
-VELOCITY_NAMES_XYZ = [VELOCITY_NAME_X, VELOCITY_NAME_Y, VELOCITY_NAME_Z] # Velocity components (Vx, Vy, Vz)
+POSITION_NAMES_XYZ = ['x', 'y', 'z'] # Position components (x, y, z)
+POSITION_NAME_X, POSITION_NAME_Y, POSITION_NAME_Z = POSITION_NAMES_XYZ
+VELOCITY_NAMES_XYZ = ['Vx', 'Vy', 'Vz'] # Velocity components (Vx, Vy, Vz)
+VELOCITY_NAME_X, VELOCITY_NAME_Y, VELOCITY_NAME_Z = VELOCITY_NAMES_XYZ
 
-# POSITION_NAMES = ['x', 'y', 'z']  # Position components (x, y, z)
-# VELOCITY_NAMES = ['Vx', 'Vy', 'Vz']  # Velocity components (Vx, Vy, Vz)
 # DIRECTION_NAMES = ['dirX', 'dirY', 'dirZ']  # Direction components (cosines in 3D space)
 # IMAGE_DIRECTION_NAMES = ['imX', 'imY', 'imZ']  # Image plane direction components
 # WEIGHTED_POSITION_NAMES = ['Xw', 'Yw', 'Zw']  # Weighted position components
@@ -68,14 +66,14 @@ def read_data(inputFile, input_is_ascii=False):
         for p in myfile.particle_blocks: # since we have a loop over the blocks, shouldn't each block's data be appended to self.data, instead of overwriting it each time?
             df = pd.DataFrame({
                 PDG_CODE_NAME: p.pdgcode,  # Particle PDG code
+                ENERGY_NAME: p.ekin,  # Kinetic energy
+                WEIGHT_NAME: p.weight  # Weight of the particle
                 POSITION_NAME_X: p.x,  # x-position
                 POSITION_NAME_Y: p.y,  # y-position
                 POSITION_NAME_Z: p.z,  # z-position
                 VELOCITY_NAME_X: p.ux,  # Velocity in x-direction
                 VELOCITY_NAME_Y: p.uy,  # Velocity in y-direction
                 VELOCITY_NAME_Z: p.uz,  # Velocity in z-direction
-                ENERGY_NAME: p.ekin,  # Kinetic energy
-                WEIGHT_NAME: p.weight  # Weight of the particle
             })
             data_frames.append(df)
         data = pd.concat(data_frames, ignore_index=True)
@@ -127,7 +125,7 @@ class BrightifyModel:
         - outputFile: Optional path to file in which previous BrightifyModel was saved (pickle dump of attributes).
           Note: Please use brightify.load_model(outputFile) instead
         - primary_protons: Number of primary protons (used for brightness calculation). Can be found in standard output file of MC code
-        - pCurrent: Proton current (used for brightness calculation).
+        - pCurrent: Source particle current (used for brightness calculation).
         - dir_size: Size of the solid-angle window (in steradians) around the direction used for brightness calculation
         """
 
@@ -176,7 +174,7 @@ class BrightifyModel:
         self.reset_filter()
 
         # --- 4. Initialize calculation method variable (holds most recent applied calculation method string e.g. "adaptive") ---
-        self.calc_method = None
+        self.calculation_method = None
 
     # Alternative: construct object of model from saved dump
     @classmethod
@@ -203,6 +201,12 @@ class BrightifyModel:
         model.__dict__.update(attrDict)
         print("Model of type "+modelType.__name__+" was loaded from "+str(dumpFile))
         print("The following attributes were filled with values: "+str(list(attrDict.keys())).strip("[]"))
+        if hasattr(model, "data") and not hasattr(model, "filter"):
+            model.reset_filter()
+        if not hasattr(model, "data"):
+            warn_text = "Your loaded model has no input data. You can insert one with `model.data = brightify.read_data(file)`."
+            if hasattr(model, "filter"): warn_text = warn_text + "\nYour loaded model contains a filter. It is recommended to run `model.reset_filter()`, unless you are sure that the filter matches the data."
+            raise UserWarning(warn_text)                 
         return model
 
     # ----- 2. Saving and loading logic -----
@@ -218,7 +222,7 @@ class BrightifyModel:
         # DEFINE THE IDENTICALLY NAMED VARIABLE in the child classes; their lists will be added to this one,
         # automatically by the saving method logic.
     
-    def get_save_keys(self):
+    def _get_save_keys(self):
         """
         Returns the names of attributes that are by default supposed to be included when saving.
         This relies on the lists of attribute names defined in the class variables named SAVE_KEYS.
@@ -232,13 +236,13 @@ class BrightifyModel:
         keys = [k for lok in lists_of_keys for k in lok]
         return keys
 
-    def get_save_attributes(self):
+    def _get_save_attributes(self):
         """
         Returns a dictionary of the attributes (names and data content) that 
         are included by default when saving.
         """
         _MISSING_ATTR = object() # a unique thing that no attribute will ever be
-        keys = self.get_save_keys()
+        keys = self._get_save_keys()
         attrDict = {key:val for key in keys if (val := getattr(self, key ,_MISSING_ATTR)) is not _MISSING_ATTR}
         # only existing attributes are included!
         return attrDict
@@ -261,7 +265,7 @@ class BrightifyModel:
                 raise FileExistsError("File was not written because it already exists at "+str(dumpFile))
         # get attributes and type and save tuple (type, dictionary) to the location
         modelType = type(self)
-        attrDict = self.get_save_attributes()
+        attrDict = self._get_save_attributes()
         # include/exclude filter:
         if not include_filter and "filter" in attrDict.keys():
             attrDict.pop("filter") 
@@ -292,6 +296,8 @@ class BrightifyModel:
         Property method to return filtered data based on the current filter
         Returns the data that matches the current filter conditions.
         """
+        if not hasattr(self, "filter"):
+            self.reset_filter()
         return self.data[self.filter]
     
     @property
@@ -542,10 +548,10 @@ class Spherical(BrightifyModel):
         - outputFile: Optional path to file in which previous BrightifyModel was saved (pickle dump of attributes).
             Note: Please use brightify.load_model(outputFile) instead
         - primary_protons: Number of primary protons (used for brightness calculation). Can be found in standard output file of MC code
-        - pCurrent: Proton current (used for brightness calculation).
+        - pCurrent: Source particle current (used for brightness calculation).
         - dir_size: Size of the solid-angle window (in steradians) around the direction used for brightness calculation            
         Additional Spherical class parameters:
-        - pos_size: position window size.
+        - pos_size: size of spatial sampling window.
         - radius: radius of the spherical shell of the dump source defined by user.
         - spiral_points: number of points for spiral scan.
 
@@ -626,9 +632,15 @@ class Spherical(BrightifyModel):
     def plot(self):
         """
         Plots a 3D brightness map of the spherical shell.
+
+        Returns
+        -------
+        fig, ax
+            The Matplotlib figure and 3D axes for further customization.
         """
-        
-        ax = plt.figure().add_subplot(111, projection='3d')
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
         sc = ax.scatter(
             self.spiral[:,2], self.spiral[:,1], self.spiral[:,0],
             c=self.brightness, cmap=plt.cm.magma, vmin=0 #c=self.window_weights
@@ -646,8 +658,9 @@ class Spherical(BrightifyModel):
             self.mean_directions_window[:,0],
             length=0.0001
             )
-        plt.colorbar(sc, ax=ax)
-
+        fig.colorbar(sc, ax=ax)
+        return fig, ax
+        
     def summary(self):
         """
         Returns a summary of the results of the spherical scan.
@@ -669,7 +682,8 @@ class Flat(BrightifyModel):
 
     #--------- Saving logic helper variable ----------
     SAVE_KEYS = ['pos_size_x', 'pos_size_y', 'pos_size',
-                 'particle', 'energy', 'dir_window', 'x_range', 'y_range',
+                 'particle', 'energy', 'dir_window', 
+                 'x_min', 'x_max', 'y_min', 'y_max', 'x_range', 'y_range',
                  'x_mesh', 'y_mesh', 'z_mesh', 'total_neutrons', 'total_weights',
                  'window_weights', 'total_mean', 'relative_error', 'sigma',
                  # for the case method == "mean" (and "normal"):
@@ -692,11 +706,11 @@ class Flat(BrightifyModel):
         - outputFile: Optional path to file in which previous BrightifyModel was saved (pickle dump of attributes).
             Note: Please use brightify.load_model(outputFile) instead
         - primary_protons: Number of primary protons (used for brightness calculation). Can be found in standard output file of MC code
-        - pCurrent: Proton current (used for brightness calculation).
+        - pCurrent: Source particle current (used for brightness calculation).
         - dir_size: Size of the solid-angle window (in steradians) around the direction used for brightness calculation            
         Additional Flat class parameters:
-        - pos_size_x: Horizontal size of the position window (used for brightness calculation).
-        - pos_size_y: Vertical size of the position window.
+        - pos_size_x: Horizontal size of the spatial sampling window (used for brightness calculation).
+        - pos_size_y: Vertical size of the spatial sampling window.
         """
         
         # --- 0. Initialize via the parent class (BrightifyModel) constructor with relevant arguments ---
@@ -780,131 +794,200 @@ class Flat(BrightifyModel):
             )
         else:
             raise ValueError(f"Unknown calculation method: {method}")
-        
-        self.calc_method = method
+        self.calculation_method = method
         return result
 
     #------------------ Unified plotting ------------------#
-    def plot_brightness_map(self, method=None, show_arrows=True):
-        """
-        Plot brightness map with optional auto-detection of method
-        used in calculate(), and arrows for direction vectors.
-    
-        method: "mean", "adaptive", "normal", or None (auto-detect)
-        show_arrows: whether to draw direction arrows
-        """
-    
-        # Ensure bounds exist
-        if not hasattr(self, "x_min") or not hasattr(self, "x_max"):
-            self.x_min, self.x_max = self.x_range.min(), self.x_range.max()
-            self.y_min, self.y_max = self.y_range.min(), self.y_range.max()
-    
-        # Auto-detect method if not provided
-        if method is None: method = self.calc_method
-    
-        # Select data
-        if method == "mean":
-            brightness_map = self.brightness.reshape(len(self.y_range),
-                                                     len(self.x_range))
-            directions = self.mean_directions
-            directions_spher = self.mean_directions_spher
-    
-        elif method == "adaptive":
-            brightness_map = self.window_weights.reshape(len(self.y_range),
-                                                         len(self.x_range))
-            directions = self.adaptive_dir
-            directions_spher = self.adaptive_dir_spher
-    
-        elif method == "normal":
-            brightness_map = self.window_weights.reshape(len(self.y_range),
-                                                         len(self.x_range))
-            directions = np.tile(np.array([[0, 0, 1]]), (self.x_mesh.size, 1))
-            directions_spher = np.stack((np.zeros(len(directions)),
-                                         np.zeros(len(directions))), axis=1)
-        else:
-            raise ValueError(f"Unknown calculation method: {method}")
-    
-        circle_centers = np.stack((self.x_mesh.flatten(), self.y_mesh.flatten()), axis=-1)
-        circle_radii = np.sin(directions_spher[:, 1])
-    
-        fig, ax = plt.subplots(figsize=(16, 12))
-        im = ax.imshow(brightness_map, cmap=plt.cm.viridis, origin='lower',
-                       extent=[self.x_min, self.x_max, self.y_min, self.y_max])
-    
-        if show_arrows:
-            for center, radius, vector in zip(circle_centers, circle_radii, directions):
-                ax.arrow(center[0], center[1], radius * vector[0], radius * vector[1],
-                         head_width=0.1, head_length=0.2, fc='blue', ec='blue')
-    
-        ax.set_xlabel('x [cm]', fontsize=18)
-        ax.set_ylabel('y [cm]', fontsize=18)
-        ax.tick_params(axis='both', which='major', labelsize=18)
-        cbar = plt.colorbar(im, label='brightness')
-        cbar.ax.tick_params(labelsize=18)
-        cbar.ax.set_ylabel('brightness [n/s/cm$^2$/sr]', fontsize=18)
-        plt.show()
+    @staticmethod
+    def _centers_to_edges(centers, fallback_width):
+        """Return cell edges whose midpoints are the supplied grid centers."""
+        centers = np.asarray(centers, dtype=float)
+        if centers.ndim != 1 or centers.size == 0:
+            raise ValueError("Plot coordinates must be a non-empty 1D array")
+        if centers.size == 1:
+            half_width = fallback_width / 2
+            return np.array([centers[0] - half_width,
+                             centers[0] + half_width])
 
-    def plot_error_map(self, method=None, show_arrows=True):
-        """
-        Plot relative error map with optional auto-detection of method
-        used in calculate(), and arrows for direction vectors.
-        """
-    
-        # Ensure bounds exist
-        if not hasattr(self, "x_min") or not hasattr(self, "x_max"):
-            self.x_min, self.x_max = self.x_range.min(), self.x_range.max()
-            self.y_min, self.y_max = self.y_range.min(), self.y_range.max()
-    
-        # Auto-detect method if not provided
-        if method is None: method = self.calc_method
-    
-        # Select data
-        if method == "mean":
-            error_map = self.relative_error.reshape(len(self.y_range),
-                                                    len(self.x_range))
-            directions = self.mean_directions
-            directions_spher = self.mean_directions_spher
-    
-        elif method == "adaptive":
-            error_map = np.full_like(self.window_weights, np.nan).reshape(
-                len(self.y_range), len(self.x_range)
-            )
+        differences = np.diff(centers)
+        if np.any(differences <= 0):
+            raise ValueError("Plot coordinates must be strictly increasing")
+        midpoints = centers[:-1] + differences / 2
+        return np.concatenate(([centers[0] - differences[0] / 2],
+                               midpoints,
+                               [centers[-1] + differences[-1] / 2]))
+
+    def _plot_method(self, method):
+        """Resolve the calculation method and its brightness direction."""
+        if method is None:
+            method = getattr(self, "calculation_method", None)
+        if method is None:
+            # Compatibility with result files written before calculation_method
+            # was stored.
+            if hasattr(self, "adaptive_dir"):
+                method = "adaptive"
+            elif hasattr(self, "mean_directions"):
+                method = "mean"
+            else:
+                method = "normal"
+
+        if method == "adaptive":
+            if not hasattr(self, "adaptive_dir"):
+                raise ValueError("Adaptive directions are not available; run "
+                                 "calculate(method='adaptive') first")
             directions = self.adaptive_dir
-            directions_spher = self.adaptive_dir_spher
-    
+        elif method == "mean":
+            if not hasattr(self, "mean_directions"):
+                raise ValueError("Mean directions are not available; run "
+                                 "calculate(method='mean') first")
+            directions = self.mean_directions
         elif method == "normal":
-            error_map = self.relative_error.reshape(len(self.y_range),
-                                                    len(self.x_range))
-            directions = np.tile(np.array([[0, 0, 1]]), (self.x_mesh.size, 1))
-            directions_spher = np.stack((np.zeros(len(directions)),
-                                         np.zeros(len(directions))), axis=1)
+            directions = np.tile((0.0, 0.0, 1.0), (self.x_mesh.size, 1))
         else:
-            raise ValueError(f"Unknown calculation method: {method}")
-    
-        circle_centers = np.stack((self.x_mesh.flatten(), self.y_mesh.flatten()), axis=-1)
-        circle_radii = np.sin(directions_spher[:, 1])
-    
-        fig, ax = plt.subplots(figsize=(16, 12))
-        im = ax.imshow(error_map, cmap=plt.cm.viridis, origin='lower',
-                       extent=[self.x_min, self.x_max, self.y_min, self.y_max])
-    
+            raise ValueError(f"Unknown plotting method: {method}")
+        return method, np.asarray(directions, dtype=float)
+
+    def _plot_flat_map(self, values, colorbar_label, method, show_arrows,
+                       figsize, square_axes, arrow_scale):
+        """Plot flat-mesh values and projected directions on the same grid."""
+        if not np.isscalar(arrow_scale) or not np.isfinite(arrow_scale):
+            raise ValueError("arrow_scale must be a finite positive number")
+        if arrow_scale <= 0:
+            raise ValueError("arrow_scale must be a finite positive number")
+
+        _, directions = self._plot_method(method=method)
+        shape = (len(self.y_range), len(self.x_range))
+        values = np.asarray(values).reshape(shape)
+        if directions.shape != (values.size, 3):
+            raise ValueError("Direction and map grids have different sizes")
+
+        # x_range/y_range are sample centers.  Supplying their extrema to
+        # imshow as an extent treats those centers as outer edges and shifts
+        # every heat-map cell away from its direction arrow.  Explicit edges
+        # also keep non-uniform and one-cell grids aligned correctly.
+        x_edges = self._centers_to_edges(centers=self.x_range, fallback_width=self.pos_size_x / 4)
+        y_edges = self._centers_to_edges(centers=self.y_range, fallback_width=self.pos_size_y / 4)
+
+        fig, ax = plt.subplots(figsize=figsize)
+        mesh = ax.pcolormesh(x_edges, y_edges, values, cmap=plt.cm.viridis,
+                             shading="flat")
+        if square_axes:
+            # Fill a square plotting box even when the x and y ranges differ
+            # substantially.  This makes long, narrow surfaces easier to read.
+            ax.set_aspect("auto")
+            ax.set_box_aspect(1)
+        else:
+            # Preserve equal physical scale in x and y.  The axes box will then
+            # follow the aspect ratio of the filtered data.
+            ax.set_aspect("equal")
+
+        # prepare_vectors stores the bounds of the filtered particle data.
+        # The regular calculation grid can extend beyond those bounds, so crop
+        # the axes to the actual data instead of displaying empty edge cells.
+        x_limits = (getattr(self, "x_min", self.x_range[0]),
+                    getattr(self, "x_max", self.x_range[-1]))
+        y_limits = (getattr(self, "y_min", self.y_range[0]),
+                    getattr(self, "y_max", self.y_range[-1]))
+        plot_x_limits = (x_limits if x_limits[0] < x_limits[1]
+                         else (x_edges[0], x_edges[-1]))
+        plot_y_limits = (y_limits if y_limits[0] < y_limits[1]
+                         else (y_edges[0], y_edges[-1]))
+        ax.set_xlim(plot_x_limits)
+        ax.set_ylim(plot_y_limits)
+
         if show_arrows:
-            for center, radius, vector in zip(circle_centers, circle_radii, directions):
-                ax.arrow(center[0], center[1], radius * vector[0], radius * vector[1],
-                         head_width=0.1, head_length=0.2, fc='blue', ec='blue')
-    
+            centers = np.column_stack((self.x_mesh.ravel(),
+                                       self.y_mesh.ravel()))
+            projected = directions[:, :2]
+            projected_norm = np.linalg.norm(projected, axis=1)
+            visible = np.isfinite(projected).all(axis=1) & (projected_norm > 0)
+            if np.any(visible):
+                # Normalize the in-plane projection because the arrows encode
+                # direction, not magnitude.  A common data-unit scale preserves
+                # their angles and keeps them within their heat-map cells.
+                arrow_vectors = (projected[visible]
+                                 / projected_norm[visible, np.newaxis])
+                if square_axes:
+                    # In a stretched data coordinate system, screen-space
+                    # angles keep the displayed arrows faithful to the x/y
+                    # direction components.  Size them relative to the
+                    # narrowest displayed grid-cell dimension.
+                    x_fraction = (np.min(np.diff(x_edges))
+                                  / np.diff(plot_x_limits)[0])
+                    y_fraction = (np.min(np.diff(y_edges))
+                                  / np.diff(plot_y_limits)[0])
+                    arrow_fraction = (0.9 * arrow_scale
+                                      * min(x_fraction, y_fraction))
+                    quiver_options = dict(angles="uv", scale_units="width",
+                                          scale=1 / arrow_fraction)
+                else:
+                    cell_size = min(np.min(np.diff(x_edges)),
+                                    np.min(np.diff(y_edges)))
+                    arrow_vectors *= 0.9 * arrow_scale * cell_size
+                    quiver_options = dict(angles="xy", scale_units="xy",
+                                          scale=1)
+                ax.quiver(centers[visible, 0], centers[visible, 1],
+                          arrow_vectors[:, 0], arrow_vectors[:, 1],
+                          pivot="middle", color="blue", width=0.005,
+                          headwidth=4, headlength=5, headaxislength=4.5,
+                          **quiver_options)
+
         ax.set_xlabel('x [cm]', fontsize=18)
         ax.set_ylabel('y [cm]', fontsize=18)
         ax.tick_params(axis='both', which='major', labelsize=18)
-        cbar = plt.colorbar(im, label='relative error')
+        cbar = fig.colorbar(mesh, ax=ax)
         cbar.ax.tick_params(labelsize=18)
-        cbar.ax.set_ylabel('relative error', fontsize=18)
-        plt.show()
-     
+        cbar.ax.set_ylabel(colorbar_label, fontsize=18)
+        return fig, ax
+
+    def plot_brightness_map(self, method=None, show_arrows=True,
+                        figsize=(10, 8), square_axes=True,
+                        arrow_scale=1.0):
+        """Plot brightness and its maximizing direction at each mesh point.
+
+        ``method`` can be ``"mean"``, ``"adaptive"``, ``"normal"``, or
+        ``None`` to use the method from the latest calculation.
+        ``figsize`` is the Matplotlib figure size in inches.
+        Set ``square_axes=False`` to preserve equal physical x/y scaling.
+        ``arrow_scale`` multiplies arrow length; larger values make the arrows
+        longer. Its default is ``1.0``.
+
+        Returns
+        -------
+        fig, ax
+            The Matplotlib figure and axes for further customization.
+        """
+        return self._plot_flat_map(values=self.brightness,
+                                    colorbar_label='brightness [n/s/cm$^2$/sr]',
+                                    method=method,
+                                    show_arrows=show_arrows, figsize=figsize,
+                                    square_axes=square_axes, arrow_scale=arrow_scale)
+
+    def plot_error_map(self, method=None, show_arrows=True, figsize=(10, 8),
+                        square_axes=True, arrow_scale=1.0):
+        """Plot relative error and the selected direction at each mesh point.
+
+        ``figsize`` is the Matplotlib figure size in inches.
+        Set ``square_axes=False`` to preserve equal physical x/y scaling.
+        ``arrow_scale`` multiplies arrow length; larger values make the arrows
+        longer. Its default is ``1.0``.
+
+        Returns
+        -------
+        fig, ax
+            The Matplotlib figure and axes for further customization.
+        """
+        return self._plot_flat_map(values=self.relative_error, colorbar_label='relative error',
+                                    method=method, 
+                                    show_arrows=show_arrows, figsize=figsize,
+                                    square_axes=square_axes, arrow_scale=arrow_scale)
+              
     def surface_crossing(self, v_x, v_y, v_z, theta_D):
         """
         Method to calculate neutron surface crossing for PHITS comparison
         w.r.t a given direction
+
+        Returns: brightness & rel. error
         
         """
         data_filt = self.data_filtered
@@ -917,7 +1000,7 @@ class Flat(BrightifyModel):
         Am = np.mean(self.data[WEIGHT_NAME]**2)  # Mean squared weight
         self.sigma = self.compute_sigma(slice_filt_i=slice_filt_i, Wt_sq_sum=Wt_sq_sum, Am=Am, window_weight=self.window_weights)
     
-            # Calculate relative error
+        # Calculate relative error
         self.relative_error = self.r_err
 
         return self.brightness, self.relative_error
@@ -926,6 +1009,8 @@ class Flat(BrightifyModel):
         """   
         Method to calculate surface crossing for the entire surface
         w.r.t mean direction
+
+        Returns: brightness
         
         """
         data_filt = self.data_filtered
