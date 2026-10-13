@@ -490,6 +490,11 @@ class Spherical(BrightifyModel):
             length=0.0001
             )
         plt.colorbar(sc, ax=ax)
+        if hasattr(self, "rotation"):
+            print("Attention: This plot is displaying data in new coordinates compared to the input data. \
+                    The input data was transformed by applying the following rotation matrix R in the sense `R * (x,y,z)^T` (column vectors):\n"
+                    +str(self.rotation))
+
 
 
     def save(self, outputFile):
@@ -710,6 +715,10 @@ class Flat(BrightifyModel):
         cbar.ax.tick_params(labelsize=18)
         cbar.ax.set_ylabel('brightness [n/s/cm$^2$/sr]', fontsize=18)
         plt.show()
+        if hasattr(self, "rotation"):
+            print("Attention: This plot is displaying data in new coordinates compared to the input data. \
+                    The input data was transformed by applying the following rotation matrix R in the sense `R * (x,y,z)^T` (column vectors):\n"
+                    +str(self.rotation))
 
     def plot_error_map(self, method=None, show_arrows=True):
         """
