@@ -296,6 +296,11 @@ class BrightifyModel:
         - apply_self: set True if you want to apply self.rotation (e.g. after reloading a model from disk and loading in the original data separately). (Overrides the two vector parameters)
         """
         # this relies on self.rotation
+        # reminder: usually, we calculate v'^T = R * v^T where v^T is a column vector.
+        # here, the vectors are all rows of data. So instead to above, we do: v' = v * R^T,
+        # because v' = (v'^T)^T = (R * v^T)^T = (v^T)^T * R^T = v * R^T.
+        # that means instead of R * v^T, we write v * R^T to apply R.
+        # In order to reverse it, we write v' * R since that is (v * R^T)*R = v * 1 = v.
         if undo_all:
             if not hasattr(self, "rotation"):
                 print("nothing to undo")
@@ -686,7 +691,6 @@ class Spherical(BrightifyModel):
         fig, ax
             The Matplotlib figure and 3D axes for further customization.
         """
-
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
         sc = ax.scatter(
@@ -707,6 +711,10 @@ class Spherical(BrightifyModel):
             length=0.0001
             )
         fig.colorbar(sc, ax=ax)
+        if hasattr(self, "rotation"):
+            print("Attention: This plot is displaying data in new coordinates compared to the input data. \
+                    The input data was transformed by applying the following rotation matrix R in the sense `R * (x,y,z)^T` (column vectors):\n"
+                    +str(self.rotation))
         return fig, ax
         
     def summary(self):
@@ -986,6 +994,10 @@ class Flat(BrightifyModel):
         cbar = fig.colorbar(mesh, ax=ax)
         cbar.ax.tick_params(labelsize=18)
         cbar.ax.set_ylabel(colorbar_label, fontsize=18)
+        if hasattr(self, "rotation"):
+            print("Attention: This plot is displaying data in new coordinates compared to the input data. \
+                    The input data was transformed by applying the following rotation matrix R in the sense `R * (x,y,z)^T` (column vectors):\n"
+                    +str(self.rotation))
         return fig, ax
 
     def plot_brightness_map(self, method=None, show_arrows=True,
