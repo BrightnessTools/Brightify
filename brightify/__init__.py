@@ -1,6 +1,6 @@
 
 
-__version__ = '2.0.0-alpha.1'
+__version__ = '2.0.0'
 
 # All that we define here (i.e. give a name),
 # will be allowed to be accessed via brightify.name,
