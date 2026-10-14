@@ -643,16 +643,23 @@ class Flat(BrightifyModel):
                 raise ValueError("Adaptive directions are not available; run "
                                  "calculate(method='adaptive') first")
             directions = self.adaptive_dir
+            directions_spher = self.adaptive_dir_spher
         elif method == "mean":
             if not hasattr(self, "mean_directions"):
                 raise ValueError("Mean directions are not available; run "
                                  "calculate(method='mean') first")
             directions = self.mean_directions
+            directions_spher = self.mean_directions_spher
         elif method == "normal":
             directions = np.tile((0.0, 0.0, 1.0), (self.x_mesh.size, 1))
+            directions_spher = np.zeros((self.x_mesh.size, 2))
         else:
             raise ValueError(f"Unknown plotting method: {method}")
-        return method, np.asarray(directions, dtype=float)
+        return (
+            method,
+            np.asarray(directions, dtype=float), 
+            np.asarray(directions_spher, dtype=float),
+            )
 
     def _plot_flat_map(self, values, colorbar_label, method, show_arrows,
                        figsize, square_axes, arrow_scale):
@@ -662,7 +669,7 @@ class Flat(BrightifyModel):
         if arrow_scale <= 0:
             raise ValueError("arrow_scale must be a finite positive number")
 
-        _, directions = self._plot_method(method)
+        _, directions, directions_spher = self._plot_method(method)
         shape = (len(self.y_range), len(self.x_range))
         values = np.asarray(values).reshape(shape)
         if directions.shape != (values.size, 3):
@@ -706,27 +713,35 @@ class Flat(BrightifyModel):
             centers = np.column_stack((self.x_mesh.ravel(),
                                        self.y_mesh.ravel()))
             projected = directions[:, :2]
-            projected_norm = np.linalg.norm(projected, axis=1)
-            visible = np.isfinite(projected).all(axis=1) & (projected_norm > 0)
+            
+                # The arrow length is proportional to sin of the polar angle
+                # The arrow orientation reflects the azimuthal angle
+            projected_magnitude = np.sin(directions_spher[:, 1])
+            
+            visible = (
+                np.isfinite(projected).all(axis=1) 
+                & np.isfinite(projected_magnitude)
+                & (np.linalg.norm(projected, axis=1) > 0)
+                )
             if np.any(visible):
-                # Normalize the in-plane projection because the arrows encode
-                # direction, not magnitude.  A common data-unit scale preserves
-                # their angles and keeps them within their heat-map cells.
+                # Preserve the in-plane direction and the arrow magnitude
+                # from the spherical polar angle.                
                 arrow_vectors = (projected[visible]
-                                 / projected_norm[visible, np.newaxis])
+                                 * projected_magnitude[visible, np.newaxis])
                 if square_axes:
                     # In a stretched data coordinate system, screen-space
                     # angles keep the displayed arrows faithful to the x/y
                     # direction components.  Size them relative to the
                     # narrowest displayed grid-cell dimension.
                     x_fraction = (np.min(np.diff(x_edges))
-                                  / np.diff(plot_x_limits)[0])
+                                  / (plot_x_limits[1] - plot_x_limits[0]))
                     y_fraction = (np.min(np.diff(y_edges))
-                                  / np.diff(plot_y_limits)[0])
+                                  / (plot_y_limits[1] - plot_y_limits[0]))
                     arrow_fraction = (0.9 * arrow_scale
                                       * min(x_fraction, y_fraction))
+                    arrow_vectors *= arrow_fraction
                     quiver_options = dict(angles="uv", scale_units="width",
-                                          scale=1 / arrow_fraction)
+                                          scale=1)
                 else:
                     cell_size = min(np.min(np.diff(x_edges)),
                                     np.min(np.diff(y_edges)))
