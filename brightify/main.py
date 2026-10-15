@@ -371,7 +371,7 @@ class BrightifyModel:
         
         return self.sigma / np.sqrt(self.window_weights)
 
-    def compute_sigma(self, slice_filt_i, Wt_sq_sum, Am, window_weight):
+    def compute_sigma(self, slice_filt_i, sum_squared_weight, mean_squared_weight, window_weight):
         """
         Compute the standard deviation (sigma) for a given filtered data slice.
         """
@@ -380,7 +380,7 @@ class BrightifyModel:
     
         # Compute sigma using precomputed values
         return np.sqrt(
-            np.abs(fc.sum_f(slice_filt_i[WEIGHT_NAME]**2) / Wt_sq_sum - Am * window_weight) /
+            np.abs(fc.sum_f(slice_filt_i[WEIGHT_NAME]**2) / sum_squared_weight - mean_squared_weight * window_weight) /
             (window_weight - 1)
         )
     
@@ -442,8 +442,8 @@ class BrightifyModel:
         forced_direction : np.ndarray or None
             If provided, use this direction for all slices instead of computing mean.
         """
-        Wt_sq_sum = fc.sum_f(self.data[WEIGHT_NAME]**2)
-        Am = np.mean(self.data[WEIGHT_NAME]**2)
+        sum_squared_weight = fc.sum_f(self.data[WEIGHT_NAME]**2)
+        mean_squared_weight = np.mean(self.data[WEIGHT_NAME]**2)
     
         self.total_neutrons = np.full(shape1D, np.nan)
         self.total_weights = np.full(shape1D, np.nan)
@@ -478,7 +478,7 @@ class BrightifyModel:
             self.window_weights[i] = fc.sum_f(slice_filt_i.Wt)
     
             # Sigma and relative error
-            self.sigma[i] = self.compute_sigma(slice_filt_i=slice_filt_i, Wt_sq_sum=Wt_sq_sum, Am=Am, window_weight=self.window_weights[i])
+            self.sigma[i] = self.compute_sigma(slice_filt_i=slice_filt_i, sum_squared_weight=sum_squared_weight, mean_squared_weight=mean_squared_weight, window_weight=self.window_weights[i])
             self.relative_error[i] = self.r_err[i]
     
             # Weighted direction
@@ -497,9 +497,9 @@ class BrightifyModel:
         threshold_frac : float
             Fraction of the global histogram maximum to define maxima voxels.
         """
-        # Calculate mean squared weight (Am) and sum of squared weights (Wt_sq_sum)
-        Wt_sq_sum = fc.sum_f(self.data[WEIGHT_NAME]**2)  # Global sum of squared weights
-        Am = np.mean(self.data[WEIGHT_NAME]**2)  # Mean squared weight
+        # Calculate mean squared weight (mean_squared_weight) and sum of squared weights (sum_squared_weight)
+        sum_squared_weight = fc.sum_f(self.data[WEIGHT_NAME]**2)  # Global sum of squared weights
+        mean_squared_weight = np.mean(self.data[WEIGHT_NAME]**2)  # Mean squared weight
     
         # Initialize arrays
         self.total_neutrons = np.full(shape1D, np.nan)
@@ -570,7 +570,7 @@ class BrightifyModel:
             self.window_weights[i] = fc.sum_f(slice_filt_i.Wt)
     
             # Sigma and weighted mean direction
-            self.sigma[i] = self.compute_sigma(slice_filt_i=slice_filt_i, Wt_sq_sum=Wt_sq_sum, Am=Am, window_weight=self.window_weights[i])
+            self.sigma[i] = self.compute_sigma(slice_filt_i=slice_filt_i, sum_squared_weight=sum_squared_weight, mean_squared_weight=mean_squared_weight, window_weight=self.window_weights[i])
             self.relative_error[i] = self.r_err[i]
             self.mean_directions_window[i] = self.mean_directions[i] * self.window_weights[i]
 
@@ -1071,9 +1071,9 @@ class Flat(BrightifyModel):
         self.window_weights = fc.sum_f(slice_filt_i.Wt)
         
         # Compute statistical uncertainty
-        Wt_sq_sum = fc.sum_f(self.data[WEIGHT_NAME]**2)  # Global sum of squared weights
-        Am = np.mean(self.data[WEIGHT_NAME]**2)  # Mean squared weight
-        self.sigma = self.compute_sigma(slice_filt_i=slice_filt_i, Wt_sq_sum=Wt_sq_sum, Am=Am, window_weight=self.window_weights)
+        sum_squared_weight = fc.sum_f(self.data[WEIGHT_NAME]**2)  # Global sum of squared weights
+        mean_squared_weight = np.mean(self.data[WEIGHT_NAME]**2)  # Mean squared weight
+        self.sigma = self.compute_sigma(slice_filt_i=slice_filt_i, sum_squared_weight=sum_squared_weight, mean_squared_weight=mean_squared_weight, window_weight=self.window_weights)
     
         # Calculate relative error
         self.relative_error = self.r_err
@@ -1097,8 +1097,8 @@ class Flat(BrightifyModel):
         self.x_min, self.x_max = data_filt.x.min(), data_filt.x.max()
         self.y_min, self.y_max = data_filt.y.min(), data_filt.y.max()
         
-        Wt_sq_sum = fc.sum_f(self.data[WEIGHT_NAME]**2)  # Global sum of squared weights
-        Am = np.mean(self.data[WEIGHT_NAME]**2)  # Mean squared weight
+        sum_squared_weight = fc.sum_f(self.data[WEIGHT_NAME]**2)  # Global sum of squared weights
+        mean_squared_weight = np.mean(self.data[WEIGHT_NAME]**2)  # Mean squared weight
         
         slice_i = data_filt
         self.total_neutrons = len(slice_i)
@@ -1112,7 +1112,7 @@ class Flat(BrightifyModel):
             ]
         self.window_weights = fc.sum_f(slice_filt_i.Wt)
         
-        self.sigma = self.compute_sigma(slice_filt_i=slice_i, Wt_sq_sum=Wt_sq_sum, Am=Am, window_weight=self.window_weights)
+        self.sigma = self.compute_sigma(slice_filt_i=slice_i, sum_squared_weight=sum_squared_weight, mean_squared_weight=mean_squared_weight, window_weight=self.window_weights)
     
             # Calculate relative error
         self.relative_error = self.r_err
