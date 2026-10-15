@@ -107,13 +107,15 @@ class BrightifyModel:
             for k,v in dataDict.items():
                 self.__dict__[k] = v
 
-    def rotate(self, z_vector=[0,0,1], x_vector=[1,0,0], undo_all=False, apply_self=False):
+    def apply_rotation(self, z_vector=[0,0,1], x_vector=[1,0,0], matrix=None, replace=False): # includes filter reset
         """
-        Rotates the coordinate system of self.data such that:
+        Rotates the coordinate system of the model's data such that:
         - z_vector ([x,y,z]): Its direction is the Z-axis in the new data. This is required for 2D models like Flat which need Z to be the normal direction.
         - x_vector ([x,y,z]): Its projection onto the new X-Y-plane is the new X-axis.
-        - undo_all: set True if you want to undo all previously applied rotations. (Overrides all other parameters)
-        - apply_self: set True if you want to apply self.rotation (e.g. after reloading a model from disk and loading in the original data separately). (Overrides the two vector parameters)
+        - matrix: Pass here any 3x3 matrix to be applied to the data instead of the two vector parameters. You should yourself ensure it is a rotation matrix.
+        - replace: If True, the rotation that's saved in the model will be the method input's rotation, instead of the total rotation that results in combination with previously applied rotations.
+
+        ATTENTION: This resets any filter that had been applied. After rotation, spatial data filters you apply need to be written with the new coordinates in mind! 
         """
         # this relies on self.rotation
         # reminder: usually, we calculate v'^T = R * v^T where v^T is a column vector.
@@ -121,21 +123,8 @@ class BrightifyModel:
         # because v' = (v'^T)^T = (R * v^T)^T = (v^T)^T * R^T = v * R^T.
         # that means instead of R * v^T, we write v * R^T to apply R.
         # In order to reverse it, we write v' * R since that is (v * R^T)*R = v * 1 = v.
-        if undo_all:
-            if not hasattr(self, "rotation"):
-                print("nothing to undo")
-                return
-            self.data.loc[:, pos] = self.data[pos].values @ self.rotation
-            self.data.loc[:, vel] = self.data[vel].values @ self.rotation
-            del self.rotation
-            return
-        elif apply_self:
-            if not hasattr(self, "rotation"):
-                print("self.rotation not found")
-                return
-            self.data.loc[:, pos] = self.data[pos].values @ self.rotation.T
-            self.data.loc[:, vel] = self.data[vel].values @ self.rotation.T
-            return
+        if matrix:
+            R = matrix
         else:
             # 1. Define the new Z-axis from the normal vector
             z_new = np.array(z_vector, dtype=float)
@@ -154,13 +143,39 @@ class BrightifyModel:
             # 4. Construct the rotation matrix (where each row is one of the new axes)
             R = np.vstack([x_new, y_new, z_new])
             # 5. Apply the TRANSPOSE of the rotation to position and velocity columns
+        if not self.parallel:
             self.data.loc[:, pos] = self.data[pos].values @ R.T
             self.data.loc[:, vel] = self.data[vel].values @ R.T
-            # store/update rotation
-            if hasattr(self, "rotation"):
-                self.rotation = R @ self.rotation
-            else:
-                self.rotation = R
+            self.reset_filter()
+        else:
+            # No calculations are done at this point on the parallel data, it will be done on demand.
+            self.reset_filter_parallel()
+        print("A coordinate rotation has been applied, and therefore the filter was reset.")
+        # store/update rotation
+        if replace or not hasattr(self, "rotation"):
+            self.rotation = R
+        else:
+            self.rotation = R @ self.rotation
+
+    def reset_rotation(self, undo=True): # includes filter reset
+        """
+            Reset rotation of coordinates. Resets filter too.
+            - undo: Set True if you want to apply the inverse of previous rotation(s) done to the data. 
+            Set to False if you just want to delete the attribute that stores the applied rotations, and do not want to change the data.
+
+            ATTENTION: After rotation-undoing, spatial data filters you apply need to be written with the new coordinates in mind!
+        """
+        if not hasattr(self, "rotation"):
+            print("No rotation found to reset.")
+            return
+        if undo:
+            print("Undoing rotation...")
+            self.data.loc[:, pos] = self.data[pos].values @ self.rotation
+            self.data.loc[:, vel] = self.data[vel].values @ self.rotation
+        self.reset_filter()
+        del self.rotation
+        print("Rotation was reset.")
+
 
     @property
     def data_filter(self):
