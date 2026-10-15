@@ -461,21 +461,21 @@ class BrightifyModel:
                 continue
     
             self.total_neutrons[i] = len(slice_i)
-            self.total_weights[i] = fc.sum_f(slice_i.Wt)
-            self.total_mean[i] = np.mean(slice_i.Wt)
+            self.total_weights[i] = fc.sum_f(slice_i[WEIGHT_NAME])
+            self.total_mean[i] = np.mean(slice_i[WEIGHT_NAME])
     
             # Use forced direction if provided, else compute mean direction
             if forced_direction is not None:
                 direction_vec = forced_direction
             else:
-                direction_vec = fc.direction_f(fc.mean_f(slice_i[VELOCITY_NAMES_XYZ], slice_i.Wt))
+                direction_vec = fc.direction_f(fc.mean_f(slice_i[VELOCITY_NAMES_XYZ], slice_i[WEIGHT_NAME]))
     
             self.mean_directions[i] = direction_vec
             self.mean_directions_spher[i] = fc.cart2spher(*direction_vec)
     
             # Apply angular filter
             slice_filt_i = slice_i[fc.cos_f(slice_i[VELOCITY_NAMES_XYZ], direction_vec) >= self.dir_window]
-            self.window_weights[i] = fc.sum_f(slice_filt_i.Wt)
+            self.window_weights[i] = fc.sum_f(slice_filt_i[WEIGHT_NAME])
     
             # Sigma and relative error
             self.sigma[i] = self.compute_sigma(slice_filt_i=slice_filt_i, sum_squared_weight=sum_squared_weight, mean_squared_weight=mean_squared_weight, window_weight=self.window_weights[i])
@@ -525,11 +525,11 @@ class BrightifyModel:
     
             # Store basic stats
             self.total_neutrons[i] = len(slice_i)
-            self.total_weights[i] = fc.sum_f(slice_i.Wt)
-            self.total_mean[i] = np.mean(slice_i.Wt)
+            self.total_weights[i] = fc.sum_f(slice_i[WEIGHT_NAME])
+            self.total_mean[i] = np.mean(slice_i[WEIGHT_NAME])
     
             # Mean direction of slice
-            self.mean_directions[i] = fc.direction_f(fc.mean_f(slice_i[VELOCITY_NAMES_XYZ], slice_i.Wt))         
+            self.mean_directions[i] = fc.direction_f(fc.mean_f(slice_i[VELOCITY_NAMES_XYZ], slice_i[WEIGHT_NAME]))         
             self.mean_directions_spher[i] = fc.cart2spher(*self.mean_directions[i])
     
             # ------------------ Cartesian histogram ------------------
@@ -567,7 +567,7 @@ class BrightifyModel:
             # Filter directions within angular window
             cos_filter = fc.cos_f(slice_i[VELOCITY_NAMES_XYZ], self.adaptive_dir[i])
             slice_filt_i = slice_i[cos_filter >= self.dir_window]
-            self.window_weights[i] = fc.sum_f(slice_filt_i.Wt)
+            self.window_weights[i] = fc.sum_f(slice_filt_i[WEIGHT_NAME])
     
             # Sigma and weighted mean direction
             self.sigma[i] = self.compute_sigma(slice_filt_i=slice_filt_i, sum_squared_weight=sum_squared_weight, mean_squared_weight=mean_squared_weight, window_weight=self.window_weights[i])
@@ -793,8 +793,8 @@ class Flat(BrightifyModel):
     #------------------ Helper: prepare meshgrid ------------------#
     def prepare_vectors(self):
         data_filt = self.data_filtered
-        self.x_min, self.x_max = data_filt.x.min(), data_filt.x.max()
-        self.y_min, self.y_max = data_filt.y.min(), data_filt.y.max()
+        self.x_min, self.x_max = data_filt[POSITION_NAME_X].min(), data_filt[POSITION_NAME_X].max()
+        self.y_min, self.y_max = data_filt[POSITION_NAME_Y].min(), data_filt[POSITION_NAME_Y].max()
         self.x_range = np.arange(self.x_min, self.x_max + 1, self.pos_size_x/4)
         self.y_range = np.arange(self.y_min, self.y_max + 1, self.pos_size_y/4)
         self.x_mesh, self.y_mesh = np.meshgrid(self.x_range, self.y_range)
@@ -1068,7 +1068,7 @@ class Flat(BrightifyModel):
         data_filt = self.data_filtered
         dir_D = np.array([v_x, v_y, v_z])
         slice_filt_i = data_filt[fc.cosRR_f(data_filt[VELOCITY_NAMES_XYZ], dir_D) >= np.cos(theta_D)]
-        self.window_weights = fc.sum_f(slice_filt_i.Wt)
+        self.window_weights = fc.sum_f(slice_filt_i[WEIGHT_NAME])
         
         # Compute statistical uncertainty
         sum_squared_weight = fc.sum_f(self.data[WEIGHT_NAME]**2)  # Global sum of squared weights
@@ -1094,23 +1094,23 @@ class Flat(BrightifyModel):
         self.dir_window = 1 - self.dir_size / (2 * np.pi)
         
         # Define the range of x and y values
-        self.x_min, self.x_max = data_filt.x.min(), data_filt.x.max()
-        self.y_min, self.y_max = data_filt.y.min(), data_filt.y.max()
+        self.x_min, self.x_max = data_filt[POSITION_NAME_X].min(), data_filt[POSITION_NAME_X].max()
+        self.y_min, self.y_max = data_filt[POSITION_NAME_Y].min(), data_filt[POSITION_NAME_Y].max()
         
         sum_squared_weight = fc.sum_f(self.data[WEIGHT_NAME]**2)  # Global sum of squared weights
         mean_squared_weight = np.mean(self.data[WEIGHT_NAME]**2)  # Mean squared weight
         
         slice_i = data_filt
         self.total_neutrons = len(slice_i)
-        self.total_weights = fc.sum_f(slice_i.Wt)
-        self.total_mean = np.mean(slice_i.Wt)
+        self.total_weights = fc.sum_f(slice_i[WEIGHT_NAME])
+        self.total_mean = np.mean(slice_i[WEIGHT_NAME])
         
-        self.mean_directions = fc.direction_f(fc.mean_f(slice_i[VELOCITY_NAMES_XYZ], slice_i.Wt))
+        self.mean_directions = fc.direction_f(fc.mean_f(slice_i[VELOCITY_NAMES_XYZ], slice_i[WEIGHT_NAME]))
         
         slice_filt_i = slice_i[
             fc.cos_f(slice_i[VELOCITY_NAMES_XYZ], self.mean_directions) >= self.dir_window
             ]
-        self.window_weights = fc.sum_f(slice_filt_i.Wt)
+        self.window_weights = fc.sum_f(slice_filt_i[WEIGHT_NAME])
         
         self.sigma = self.compute_sigma(slice_filt_i=slice_i, sum_squared_weight=sum_squared_weight, mean_squared_weight=mean_squared_weight, window_weight=self.window_weights)
     
