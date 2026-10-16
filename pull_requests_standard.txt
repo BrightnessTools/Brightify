@@ -19,7 +19,7 @@ git diff upstream/main...my-dev-branch > my_changes.diff
     docs (documentation).
 - Multiple keywords can be combined (e.g., fix, perf).
 - If the PR covers multiple distinct topics, separate them with AND.
-Example: fix: MCPL reading loop, AND feat: coordinates rotation).
+Example: fix: MCPL reading loop, AND feat: coordinates rotation.
 
 2. DESCRIPTION PART 1: CHANGES
 For single-topic PRs, use the format below.
