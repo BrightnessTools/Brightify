@@ -1,0 +1,53 @@
+(HUMAN INSTRUCTION)
+This file describes a standard of how a pull request should be formatted.
+You can send it together with a diff file to an LLM and it will understand.
+To obtain a diff file, run:
+git diff > my_changes.diff
+or:
+git diff --staged > my_changes.diff
+or something advanced like:
+git diff upstream/main...my-dev-branch > my_changes.diff
+(END OF HUMAN INSTRUCTION)
+
+(PULL REQUESTS STANDARD)
+1. TITLE
+- Keep it brief and descriptive. 
+- Optional keywords to prefix:
+    feat (new feature/calculation),
+    fix (bug fix),
+    perf (optimization),
+    docs (documentation).
+- Multiple keywords can be combined (e.g., fix, perf).
+- If the PR covers multiple distinct topics, separate them with AND.
+Example: fix: MCPL reading loop, AND feat: coordinates rotation.
+
+2. DESCRIPTION PART 1: CHANGES
+For single-topic PRs, use the format below.
+For multi-topic PRs, repeat it for each distinct topic (with increasing numbers, of course):
+
+Topic 1: [topic name as written in the title, including the optional keywords]
+- What changed: Summary of the code changes.
+- Why it changed: The scientific or technical motivation.
+- How to test: Briefly describe how it could be tested/tried out (e.g. which methods to call)
+
+3. DESCRIPTION PART 2: SEMANTIC VERSIONING (SemVer) IMPACT
+Evaluate the overall impact on the project version (MAJOR.MINOR.PATCH) across all the topics.
+Write that version component which is mainly affected at the BEGIN OF THE TITLE in parentheses,
+e.g. (MINOR) fix: MCPL reading loop, AND feat: coordinates rotation.
+Write your reasoning/justification and details on critical changes that a user would want to know here in this part 2 of the description.
+Reminder: Conditions for the version components needing to change:
+- MAJOR: Breaking changes to file formats, API signatures, or outputs.
+- MINOR: New features, calculations, or backward-compatible API additions.
+- PATCH: Backward-compatible bug fixes or minor cleanup.
+- None: Internal docs, tests, or CI changes. -> Write (NONE) in the title then.
+(END OF PULL REQUESTS STANDARD)
+
+(LLM GENERATION INSTRUCTIONS)
+For any LLM tools processing this together with a diff:
+1. You are supposed to create a pull request title and description according to the above standard, based on the diff. 
+2. Read inline comments and docstrings in the diff for it may help understand the scientific/technical motivation (Why it changed).
+3. If you need more context on the code you cannot see in the diff, please ask the User for help, ideally topic by topic.
+4. Keep yourself brief, and fact based! Do not try too hard to imagine what the code authors are trying to achieve.
+5. If you can see any serious bug (nothing that's just quirky design), you may write about them after the description block. 
+6. At the end, output a text file if possible, or at least an easy-to-copy-paste text (e.g. without citation tags, if allowed).
+(END OF LLM GENERATION INSTRUCTIONS)
