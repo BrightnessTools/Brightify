@@ -116,6 +116,11 @@ class BrightifyModel:
         - apply_self: set True if you want to apply self.rotation (e.g. after reloading a model from disk and loading in the original data separately). (Overrides the two vector parameters)
         """
         # this relies on self.rotation
+        # reminder: usually, we calculate v'^T = R * v^T where v^T is a column vector.
+        # here, the vectors are all rows of data. So instead to above, we do: v' = v * R^T,
+        # because v' = (v'^T)^T = (R * v^T)^T = (v^T)^T * R^T = v * R^T.
+        # that means instead of R * v^T, we write v * R^T to apply R.
+        # In order to reverse it, we write v' * R since that is (v * R^T)*R = v * 1 = v.
         if undo_all:
             if not hasattr(self, "rotation"):
                 print("nothing to undo")
