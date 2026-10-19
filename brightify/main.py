@@ -363,8 +363,10 @@ class Spherical(BrightifyModel):
 
         """
         # Initialize the parent class (BrightifyModel) with relevant arguments
-        super().__init__(inputFile, outputFile, primary_protons, pCurrent, 
-                         pos_size, dir_size)
+        super().__init__(inputFile=inputFile, outputFile=outputFile,
+                         primary_protons=primary_protons, pCurrent=pCurrent, 
+                         pos_size_x=np.sqrt(pos_size), pos_size_y=np.sqrt(pos_size),
+                         dir_size=dir_size)
         
         # If input file is provided, validate and initialize additional parameters
         if inputFile:
@@ -494,8 +496,10 @@ class Flat(BrightifyModel):
         """
         Initialize the Flat model, subclass of BrightifyModel.
         """
-        super().__init__(inputFile, outputFile, primary_protons, pCurrent, 
-                         pos_size_x, pos_size_y, dir_size)
+        super().__init__(inputFile=inputFile, outputFile=outputFile,
+                         primary_protons=primary_protons, pCurrent=pCurrent, 
+                         pos_size_x=pos_size_x, pos_size_y=pos_size_y,
+                         dir_size=dir_size)
 
     #------------------ Helper: prepare meshgrid ------------------#
     def prepare_vectors(self):
