@@ -58,7 +58,28 @@ class BrightifyModel:
         self.pos_size_y = pos_size_y
         self.pos_size = pos_size_x * pos_size_y
         self.dir_size = dir_size
-        
+
+        def read_mcpl_data(inputFile):
+            # Read the MCPL file (format used for Brightify input files)
+            myfile=mcpl.MCPLFile(inputFile,blocklength=1e13)
+            # Loop through each particle block in the MCPL file and store data
+            # in a pandas DataFrame
+            datas = []
+            for p in myfile.particle_blocks:
+                datas.append(pd.DataFrame({
+                    'Kf': p.pdgcode,  # Particle PDG code
+                    'x': p.x,  # x-position
+                    'y': p.y,  # y-position
+                    'z': p.z,  # z-position
+                    'Vx': p.ux,  # Velocity in x-direction
+                    'Vy': p.uy,  # Velocity in y-direction
+                    'Vz': p.uz,  # Velocity in z-direction
+                    'e': p.ekin,  # Kinetic energy
+                    'Wt': p.weight  # Weight of the particle
+                }))
+                data = pd.concat(datas, ignore_index=True)
+            return data
+
         # If an input file is provided, load the particle data from the file
         if inputFile:
             # Check that provided values are of the correct type
@@ -79,33 +100,39 @@ class BrightifyModel:
 #                        )
 #                 )
             
-            # Read the MCPL file (format used for Brightify input files)
-            myfile=mcpl.MCPLFile(self.inputFile,blocklength=1e13)
-            # Loop through each particle block in the MCPL file and store data
-            # in a pandas DataFrame
-            for p in myfile.particle_blocks:
-                self.data = pd.DataFrame({
-                    'Kf': p.pdgcode,  # Particle PDG code
-                    'x': p.x,  # x-position
-                    'y': p.y,  # y-position
-                    'z': p.z,  # z-position
-                    'Vx': p.ux,  # Velocity in x-direction
-                    'Vy': p.uy,  # Velocity in y-direction
-                    'Vz': p.uz,  # Velocity in z-direction
-                    'e': p.ekin,  # Kinetic energy
-                    'Wt': p.weight  # Weight of the particle
-                })
-                
-            # Reset filter to include all data initially    
-            self.reset_filter()
+            self.data = read_mcpl_data(inputFile)
             
         # If an output file is provided, load previously saved data
         if outputFile:
             with open(outputFile, 'rb') as f:
                 dataDict = pkl.load(f)
-            
-            for k,v in dataDict.items():
-                self.__dict__[k] = v
+
+            old_inputFile = dataDict.pop("inputFile", None) # this removes the key (if it exists). In the below code, that is benefitial.
+            if old_inputFile != self.inputFile:
+                print("Attention: The outputFile says that the previously used inputFile path is different from the entered inputFile parameter.")
+                print("The previously used inputFile was located at "+str(old_inputFile))
+            if self.inputFile is None and old_inputFile is not None:
+                print("The previous inputFile will be used now, because the entered inputFile parameter is None.")
+                self.data = read_mcpl_data(old_inputFile)
+                self.inputFile = old_inputFile
+
+            # find out if currently new parameters are different than saved parameters:
+            parameters_are_different = False
+            for k,v in self.__dict__.items(): # loop over all currently new parameters
+                if k in dataDict and dataDict[k] != v: # if outputFile has the parameter but with a different value:
+                    parameters_are_different = True
+                    break
+
+            if not parameters_are_different:
+                for k,v in dataDict.items():
+                    self.__dict__[k] = v
+                print("Parameters from outputFile were loaded.")
+            else:
+                print("No parameters from outputFile were loaded because the entered parameters are different.")
+
+                           
+        # Reset filter to include all data initially    
+        self.reset_filter()
         
         
     @property
