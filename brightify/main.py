@@ -389,12 +389,6 @@ class Spherical(BrightifyModel):
         None.
 
         """
-        # Initialize the parent class (BrightifyModel) with relevant arguments
-        super().__init__(inputFile=inputFile, outputFile=outputFile,
-                         primary_protons=primary_protons, pCurrent=pCurrent, 
-                         pos_size_x=np.sqrt(pos_size), pos_size_y=np.sqrt(pos_size),
-                         dir_size=dir_size)
-        
         # If input file is provided, validate and initialize additional parameters
         if inputFile:
             assert type(radius) == float
@@ -403,6 +397,12 @@ class Spherical(BrightifyModel):
             self.spiral_points = spiral_points
             self.spiral = Spherical.spiral_scan(spiral_points)
             
+        # Initialize the parent class (BrightifyModel) with relevant arguments
+        super().__init__(inputFile=inputFile, outputFile=outputFile,
+                         primary_protons=primary_protons, pCurrent=pCurrent, 
+                         pos_size_x=np.sqrt(pos_size), pos_size_y=np.sqrt(pos_size),
+                         dir_size=dir_size)
+        
     def spherical_filter_func(self, data_filt, vec):
         """
         Filtering function specific to the Spherical subclass. 
@@ -523,6 +523,9 @@ class Flat(BrightifyModel):
         """
         Initialize the Flat model, subclass of BrightifyModel.
         """
+
+        # Initialize special attributes here, above the super() call!
+
         super().__init__(inputFile=inputFile, outputFile=outputFile,
                          primary_protons=primary_protons, pCurrent=pCurrent, 
                          pos_size_x=pos_size_x, pos_size_y=pos_size_y,
