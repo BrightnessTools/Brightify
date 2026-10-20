@@ -60,8 +60,8 @@ class BrightifyModel:
         """
                 
         # --- 1. Assign attributes, converting to correct types (unless None, which is allowed until after the reading of outputFile) ---
-        self.inputFile = inputFile
-        self.outputFile = outputFile
+        self.inputFile = str(inputFile) if inputFile is not None else None
+        self.outputFile = str(outputFile) if outputFile is not None else None
         self.primary_protons = int(primary_protons) if primary_protons is not None else None
         self.pCurrent = float(pCurrent) if pCurrent is not None else None
         self.pos_size = float(pos_size) if pos_size is not None else None
@@ -80,34 +80,37 @@ class BrightifyModel:
             raise ValueError("dir_size incorrect")
         
         # If an input file is provided, load the particle data from the file
-        if self.inputFile:
+        if self.inputFile is not None:
             self.data = self.read_mcpl_data(self.inputFile)
         
         # If an output file is provided, load previously saved attributes unless already initialized with a different value (except None)
-        if self.outputFile:
-            with open(self.outputFile, 'rb') as f:
-                dataDict = pkl.load(f)
-            old_inputFile = dataDict.pop("inputFile", None) # this removes the key (if it exists). In the below code, that is benefitial.
-            if old_inputFile != self.inputFile:
-                print("Attention: The outputFile says that the previously used inputFile path is different from the entered inputFile parameter.")
-                print("The previously used inputFile was located at "+str(old_inputFile))
-            if self.inputFile is None and old_inputFile is not None:
-                print("The previous inputFile will be used now, because the entered inputFile parameter is None.")
-                self.data = self.read_mcpl_data(old_inputFile)
-                self.inputFile = old_inputFile
-            # find out if currently new parameters/attributes are different than saved parameters/attributes:
-            parameters_are_different = False
-            for k,v in self.__dict__.items(): # loop over all currently new parameters
-                if v is None: continue # We do not mind parameters that are None being overwritten by previously used values, right?
-                if k in dataDict and dataDict[k] != v: # if outputFile has the parameter but with a different value:
-                    parameters_are_different = True
-                    break
-            if not parameters_are_different:
-                for k,v in dataDict.items():
-                    self.__dict__[k] = v
-                print("Parameters/attributes from outputFile were loaded.")
-            else:
-                print("No parameters/attributes from outputFile were loaded because the entered parameters are different.")
+        if self.outputFile is not None:
+            try: # Try to open and read the outputFile
+                with open(self.outputFile, 'rb') as f:
+                    dataDict = pkl.load(f)
+                old_inputFile = dataDict.pop("inputFile", None) # this removes the key (if it exists). In the below code, that is benefitial.
+                if old_inputFile != self.inputFile:
+                    print("Attention: The outputFile says that the previously used inputFile path is different from the entered inputFile parameter.")
+                    print("The previously used inputFile was located at "+str(old_inputFile))
+                if self.inputFile is None and old_inputFile is not None:
+                    print("The previous inputFile will be used now, because the entered inputFile parameter is None.")
+                    self.data = self.read_mcpl_data(old_inputFile)
+                    self.inputFile = old_inputFile
+                # find out if currently new parameters/attributes are different than saved parameters/attributes:
+                parameters_are_different = False
+                for k,v in self.__dict__.items(): # loop over all currently new parameters
+                    if v is None: continue # We do not mind parameters that are None being overwritten by previously used values, right?
+                    if k in dataDict and dataDict[k] != v: # if outputFile has the parameter but with a different value:
+                        parameters_are_different = True
+                        break
+                if not parameters_are_different:
+                    for k,v in dataDict.items():
+                        self.__dict__[k] = v
+                    print("Parameters/attributes from outputFile were loaded.")
+                else:
+                    print("No parameters/attributes from outputFile were loaded because the entered parameters are different.")
+            except: # In this case, self.outputFile is just the location where future results are supposed to be stored
+                print("Results will be saved by default at "+self.outputFile)
         
         # Reset filter to include all data initially    
         self.reset_filter()
@@ -503,14 +506,14 @@ class Spherical(BrightifyModel):
         plt.colorbar(sc, ax=ax)
 
 
-    def save(self, outputFile):
+    def save(self, outputFile=None):
         """
         Saves the model's data to a pickle file for future use.
         
         Parameters
         ----------
         outputFile : str
-            The output file path where the data will be saved.
+            The output file path where the data will be saved. If None is provided, the outputFile that was specified at model creation is used.
         
         Returns
         -------
@@ -525,10 +528,13 @@ class Spherical(BrightifyModel):
                 )
         
         # Create a dictionary of data to save
-        dataDict = {k: self.__dict__[k] for k in keys}
+        dataDict = {k: self.__dict__[k] for k in keys if k in self.__dict__}
+
+        if outputFile is None:
+            outputFile = self.outputFile
         
         # Save the data dictionary to a pickle file
-        with open(outputFile, 'wb') as f:
+        with open(outputFile, 'xb') as f:
             pkl.dump(dataDict, f)        
     
     def summary(self):
@@ -661,12 +667,26 @@ class Flat(BrightifyModel):
             raise ValueError(f"Unknown calculation method: {method}")
 
     #------------------   save data   --------------------#
-    def save(self, outputFile, method="adaptive"):
+    def save(self, outputFile=None, method="adaptive"):
+        """
+        Saves the model's data to a pickle file for future use.
+        
+        Parameters
+        ----------
+        outputFile : str
+            The output file path where the data will be saved. If None is provided, the outputFile that was specified at model creation is used.
+        method : str
+            The calculation method that was used ("adaptive", "mean" or "normal"). It determines which of the models attributes are included in the save.
+        
+        Returns
+        -------
+        None.
+        """
         common_keys = (
             'inputFile', 'primary_protons', 'pCurrent', 'pos_size', 'dir_size',
             'particle', 'energy', 'dir_window', 'x_range', 'y_range',
             'x_mesh', 'y_mesh', 'z_mesh', 'total_neutrons', 'total_weights',
-            'window_weights', 'total_mean', 'relative_error'
+            'window_weights', 'total_mean', 'relative_error', 'sigma'
             )
         if method == "mean":
             common_keys += (
@@ -680,8 +700,13 @@ class Flat(BrightifyModel):
             )
         elif method != "normal":
             raise ValueError(f"Unknown save method: {method}")
-        dataDict = {k: self.__dict__[k] for k in common_keys}
-        with open(outputFile, 'wb') as f:
+        
+        dataDict = {k: self.__dict__[k] for k in common_keys if k in self.__dict__}
+        
+        if outputFile is None:
+            outputFile = self.outputFile
+
+        with open(outputFile, 'xb') as f:
             pkl.dump(dataDict, f)
 
     #------------------   load data   --------------------#
@@ -851,7 +876,7 @@ class Flat(BrightifyModel):
 
 
  
-    def surface_crossing_all_surface(self, outputFile):
+    def surface_crossing_all_surface(self):
         """   
         Method to calculate surface crossing for the entire surface
         w.r.t mean direction
@@ -885,16 +910,5 @@ class Flat(BrightifyModel):
     
             # Calculate relative error
         self.relative_error = self.r_err
-        
-        
-        keys = ('inputFile', 'primary_protons', 'pCurrent', 'dir_size',
-        'particle', 'energy', 'dir_window', 'total_neutrons', 'total_weights',
-        'window_weights', 'total_mean', 'relative_error', 'sigma', 'mean_directions'
-        )
-        
-        dataDict = {k: self.__dict__[k] for k in keys}
-        
-        with open(outputFile, 'wb') as f:
-            pkl.dump(dataDict, f)
-        
-        return dataDict, self.brightness         
+                        
+        return self.brightness         
