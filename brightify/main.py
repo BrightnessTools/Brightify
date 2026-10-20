@@ -34,106 +34,123 @@ vel_m = ['Vxm', 'Vym', 'Vzm']  # Mean velocity components
 #%%
 class BrightifyModel:
     def __init__(self, inputFile=None, outputFile=None, primary_protons=None,
-                 pCurrent=None, pos_size_x=None, pos_size_y=None, dir_size=None):
+                 pCurrent=None, pos_size=None, dir_size=None):
         """
         Initializes the BrightifyModel class.
         
-        Parameters:
-        - inputFile: Path to the input file containing particle data (optional).
-        - outputFile: Path to the output file where results are saved (optional).
-        - primary_protons: Number of primary protons (used for brightness calculation).
-        - pCurrent: Particle current (used for brightness calculation).
-        - pos_size_x: Horizontal size of the position window (used for brightness calculation).
-        - pose_size_y: Vertical size of the position window.
-        - dir_size: Size of the direction window (used for brightness calculation).
+        Parameters
+        ----------
+        inputFile: str
+            Path to the input file containing particle data.
+        outputFile: str
+            Path to the output file where results are saved. This may be the path to a previously saved outputFile.
+            In that case, it will be attempted to load values from it.
+        primary_protons: int
+            Number of primary protons; Can be found in standard output file of MC code.
+        pCurrent: float
+            Proton current.
+        pos_size: float
+            Spatial size (area) of the position window.
+        dir_size: float
+            Size of the direction window in steradians.
+
+        Returns
+        -------
+        None.
         """
-        
-        # Ensure that either inputFile or outputFile exists
-#        assert path.exists(inputFile) or path.exists(outputFile)
-        
+                
+        # --- 1. Assign attributes, converting to correct types (unless None, which is allowed until after the reading of outputFile) ---
         self.inputFile = inputFile
-        self.primary_protons = primary_protons
-        self.pCurrent = pCurrent
-        self.pos_size_x = pos_size_x
-        self.pos_size_y = pos_size_y
-        self.pos_size = pos_size_x * pos_size_y
-        self.dir_size = dir_size
+        self.outputFile = outputFile
+        self.primary_protons = int(primary_protons) if primary_protons is not None else None
+        self.pCurrent = float(pCurrent) if pCurrent is not None else None
+        self.pos_size = float(pos_size) if pos_size is not None else None
+        self.dir_size = float(dir_size) if dir_size is not None else None
 
-        def read_mcpl_data(inputFile):
-            # Read the MCPL file (format used for Brightify input files)
-            myfile=mcpl.MCPLFile(inputFile,blocklength=1e13)
-            # Loop through each particle block in the MCPL file and store data
-            # in a pandas DataFrame
-            datas = []
-            for p in myfile.particle_blocks:
-                datas.append(pd.DataFrame({
-                    'Kf': p.pdgcode,  # Particle PDG code
-                    'x': p.x,  # x-position
-                    'y': p.y,  # y-position
-                    'z': p.z,  # z-position
-                    'Vx': p.ux,  # Velocity in x-direction
-                    'Vy': p.uy,  # Velocity in y-direction
-                    'Vz': p.uz,  # Velocity in z-direction
-                    'e': p.ekin,  # Kinetic energy
-                    'Wt': p.weight  # Weight of the particle
-                }))
-                data = pd.concat(datas, ignore_index=True)
-            return data
-
+        # --- 2. Check correctness (unless None) and calculate additional attributes ---
+        if self.inputFile is None and self.outputFile is None: # Ensure that either inputFile or outputFile exists
+            raise ValueError("both inputFile and outputFile are None")
+        if self.primary_protons is not None and self.primary_protons < 1:
+            raise ValueError("primary_protons incorrect")
+        if self.pCurrent is not None and self.pCurrent <= 0:
+            raise ValueError("pCurrent incorrect")
+        if self.pos_size is not None and self.pos_size <= 0:
+            raise ValueError("pos_size incorrect")
+        if self.dir_size is not None and self.dir_size <= 0:
+            raise ValueError("dir_size incorrect")
+        
         # If an input file is provided, load the particle data from the file
-        if inputFile:
-            # Check that provided values are of the correct type
-            assert type(int(self.primary_protons)) == int
-            assert type(self.pCurrent) == float
-            assert type(pos_size_x) == float
-            assert type(pos_size_y) == float
-            assert type(dir_size) == float
-            
-# if the ascii version is used as input
-#            with open(self.inputFile, 'r') as f:
-#                 self.data = f.read().replace('D', 'E')
-#                
-#            self.data = pd.read_csv(
-#                 StringIO(self.data), header=None, delim_whitespace=True, 
-#                 names=('Kf', 'x', 'y', 'z', 'Vx', 'Vy', 'Vz', 'e', 'Wt',
-#                        'time', 'c1', 'c2', 'c3', 'name', 'nocas', 'nobch', 'no'
-#                        )
-#                 )
-            
-            self.data = read_mcpl_data(inputFile)
-            
-        # If an output file is provided, load previously saved data
-        if outputFile:
-            with open(outputFile, 'rb') as f:
+        if self.inputFile:
+            self.data = self.read_mcpl_data(self.inputFile)
+        
+        # If an output file is provided, load previously saved attributes unless already initialized with a different value (except None)
+        if self.outputFile:
+            with open(self.outputFile, 'rb') as f:
                 dataDict = pkl.load(f)
-
             old_inputFile = dataDict.pop("inputFile", None) # this removes the key (if it exists). In the below code, that is benefitial.
             if old_inputFile != self.inputFile:
                 print("Attention: The outputFile says that the previously used inputFile path is different from the entered inputFile parameter.")
                 print("The previously used inputFile was located at "+str(old_inputFile))
             if self.inputFile is None and old_inputFile is not None:
                 print("The previous inputFile will be used now, because the entered inputFile parameter is None.")
-                self.data = read_mcpl_data(old_inputFile)
+                self.data = self.read_mcpl_data(old_inputFile)
                 self.inputFile = old_inputFile
-
-            # find out if currently new parameters are different than saved parameters:
+            # find out if currently new parameters/attributes are different than saved parameters/attributes:
             parameters_are_different = False
             for k,v in self.__dict__.items(): # loop over all currently new parameters
+                if v is None: continue # We do not mind parameters that are None being overwritten by previously used values, right?
                 if k in dataDict and dataDict[k] != v: # if outputFile has the parameter but with a different value:
                     parameters_are_different = True
                     break
-
             if not parameters_are_different:
                 for k,v in dataDict.items():
                     self.__dict__[k] = v
-                print("Parameters from outputFile were loaded.")
+                print("Parameters/attributes from outputFile were loaded.")
             else:
-                print("No parameters from outputFile were loaded because the entered parameters are different.")
-
-                           
+                print("No parameters/attributes from outputFile were loaded because the entered parameters are different.")
+        
         # Reset filter to include all data initially    
         self.reset_filter()
-        
+
+        # --- 3. Final check that we now have all that we need (should do that in the child classes too for their special attributes) ---
+        for attr in ["primary_protons", "pCurrent", "pos_size", "dir_size", "data", "filter"]:
+            if getattr(self, attr, None) is None:
+                raise ValueError("The model is missing a critical attribute: "+attr)
+
+    @staticmethod
+    def read_mcpl_data(inputFile):
+        # Read the MCPL file (format used for Brightify input files)
+        myfile=mcpl.MCPLFile(inputFile,blocklength=1e13)
+        # Loop through each particle block in the MCPL file and store data
+        # in a pandas DataFrame
+        datas = []
+        for p in myfile.particle_blocks:
+            datas.append(pd.DataFrame({
+                'Kf': p.pdgcode,  # Particle PDG code
+                'x': p.x,  # x-position
+                'y': p.y,  # y-position
+                'z': p.z,  # z-position
+                'Vx': p.ux,  # Velocity in x-direction
+                'Vy': p.uy,  # Velocity in y-direction
+                'Vz': p.uz,  # Velocity in z-direction
+                'e': p.ekin,  # Kinetic energy
+                'Wt': p.weight  # Weight of the particle
+            }))
+            data = pd.concat(datas, ignore_index=True)
+        return data
+
+    # @staticmethod
+    # def read_ascii_data(inputFile):
+    #     # if the ascii version is used as input
+    #     with open(inputFile, 'r') as f:
+    #         data = f.read().replace('D', 'E')
+    #     data = pd.read_csv(
+    #         StringIO(data), header=None, delim_whitespace=True, 
+    #         names=('Kf', 'x', 'y', 'z', 'Vx', 'Vy', 'Vz', 'e', 'Wt',
+    #                'time', 'c1', 'c2', 'c3', 'name', 'nocas', 'nobch', 'no'
+    #                )
+    #         )
+    #     return data  
         
     @property
     def data_filter(self):
@@ -370,15 +387,18 @@ class Spherical(BrightifyModel):
         
         Parameters
         ----------
-        primary_protons : int
-            number of primary protons. Can be found in standard output file of 
-            MC code
-        pCurrent : float
-            proton current defined by user.
-        pos_size : float
-            position window size defined by user.
-        dir_size : float
-            direction window size defined by user.
+        inputFile: str
+            Path to the input file containing particle data.
+        outputFile: str
+            Path to the output file where results are saved.
+        primary_protons: int
+            Number of primary protons; Can be found in standard output file of MC code.
+        pCurrent: float
+            Proton current.
+        pos_size: float
+            Spatial size (area) of the position window.
+        dir_size: float
+            Size of the direction window in steradians.
         radius : float
             radius of the spherical shell of the dump source defined by user.
         spiral_points : int
@@ -387,21 +407,32 @@ class Spherical(BrightifyModel):
         Returns
         -------
         None.
-
         """
-        # If input file is provided, validate and initialize additional parameters
-        if inputFile:
-            assert type(radius) == float
-            
-            self.radius = radius
-            self.spiral_points = spiral_points
-            self.spiral = Spherical.spiral_scan(spiral_points)
-            
+
+        # --- 1. Assign attributes (only those that super() doesn't already assign), converting to correct types (unless None) --- 
+        self.radius = float(radius) if radius is not None else None
+        self.spiral_points = int(spiral_points) if spiral_points is not None else None
+
+        # --- 2. Check correctness (unless None) and calculate additional attributes ---
+        if self.radius is not None and self.radius <= 0:
+            raise ValueError("radius incorrect")
+        if self.spiral_points is not None:
+            if self.spiral_points >= 1:
+                self.spiral = Spherical.spiral_scan(self.spiral_points)
+            else:
+                raise ValueError("spiral_points incorrect")
+               
         # Initialize the parent class (BrightifyModel) with relevant arguments
         super().__init__(inputFile=inputFile, outputFile=outputFile,
                          primary_protons=primary_protons, pCurrent=pCurrent, 
-                         pos_size_x=np.sqrt(pos_size), pos_size_y=np.sqrt(pos_size),
+                         pos_size=pos_size,
                          dir_size=dir_size)
+        
+        # --- 3. Final check that we now have all that we need (no need to check parent attributes) ---
+        for attr in ["radius", "spiral_points", "spiral"]:
+            if getattr(self, attr, None) is None:
+                raise ValueError("The model is missing a critical attribute: "+attr)
+
         
     def spherical_filter_func(self, data_filt, vec):
         """
@@ -522,14 +553,51 @@ class Flat(BrightifyModel):
                  pCurrent=None, pos_size_x=None, pos_size_y=None, dir_size=None):
         """
         Initialize the Flat model, subclass of BrightifyModel.
+        
+        Parameters
+        ----------
+        inputFile: str
+            Path to the input file containing particle data.
+        outputFile: str
+            Path to the output file where results are saved. This may be the path to a previously saved outputFile.
+            In that case, it will be attempted to load values from it.
+        primary_protons: int
+            Number of primary protons; Can be found in standard output file of MC code.
+        pCurrent: float
+            Proton current.
+        pos_size_x: float
+            Horizontal size of the position window.
+        pos_size_y: float
+            Vertical size of the position window.
+        dir_size: float
+            Size of the direction window in steradians.
+
+        Returns
+        -------
+        None.
         """
-
-        # Initialize special attributes here, above the super() call!
-
+        # --- 1. Assign attributes (only those that super() doesn't already assign), converting to correct types (unless None) ---
+        self.pos_size_x = float(pos_size_x) if pos_size_x is not None else None
+        self.pos_size_y = float(pos_size_y) if pos_size_y is not None else None
+        
+        # --- 2. Check correctness (unless None) and calculate additional attributes ---
+        if self.pos_size_x is not None and self.pos_size_x <= 0:
+            raise ValueError("pos_size_x incorrect")
+        if self.pos_size_y is not None and self.pos_size_y <= 0:
+            raise ValueError("pos_size_y incorrect")
+        
+        # Initialize the parent class (BrightifyModel) with relevant arguments
+        pos_size = pos_size_x * pos_size_y if (pos_size_x is not None) and (pos_size_y is not None) else None
         super().__init__(inputFile=inputFile, outputFile=outputFile,
                          primary_protons=primary_protons, pCurrent=pCurrent, 
-                         pos_size_x=pos_size_x, pos_size_y=pos_size_y,
+                         pos_size=pos_size,
                          dir_size=dir_size)
+
+        # --- 3. Final check that we now have all that we need (no need to check parent attributes) ---
+        for attr in ["pos_size_x", "pos_size_y", "pos_size"]:
+            if getattr(self, attr, None) is None:
+                raise ValueError("The model is missing a critical attribute: "+attr)
+
 
     #------------------ Helper: prepare meshgrid ------------------#
     def prepare_vectors(self):
