@@ -26,3 +26,4 @@ def test_model_particle_type(flat_model):
 def test_model_filtering(flat_model):
     flat_model.apply_filter(energy=(0,1e-10))
     assert len(flat_model.data_filter) == 0
+    
