@@ -106,8 +106,77 @@ class BrightifyModel:
             
             for k,v in dataDict.items():
                 self.__dict__[k] = v
-        
-        
+
+    def apply_rotation(self, z_vector=[0,0,1], x_vector=[1,0,0], matrix=None, replace=False): # includes filter reset
+        """
+        Rotates the coordinate system of the model's data such that:
+        - z_vector ([x,y,z]): Its direction is the Z-axis in the new data. This is required for 2D models like Flat which need Z to be the normal direction.
+        - x_vector ([x,y,z]): Its projection onto the new X-Y-plane is the new X-axis.
+        - matrix: Pass here any 3x3 matrix to be applied to the data instead of the two vector parameters. You should yourself ensure it is a rotation matrix.
+        - replace: If True, the rotation that's saved in the model will be the method input's rotation, instead of the total rotation that results in combination with previously applied rotations.
+
+        ATTENTION: This resets any filter that had been applied. After rotation, spatial data filters you apply need to be written with the new coordinates in mind! 
+        """
+        # this relies on self.rotation
+        # reminder: usually, we calculate v'^T = R * v^T where v^T is a column vector.
+        # here, the vectors are all rows of data. So instead to above, we do: v' = v * R^T,
+        # because v' = (v'^T)^T = (R * v^T)^T = (v^T)^T * R^T = v * R^T.
+        # that means instead of R * v^T, we write v * R^T to apply R.
+        # In order to reverse it, we write v' * R since that is (v * R^T)*R = v * 1 = v.
+        if matrix:
+            R = matrix
+        else:
+            # 1. Define the new Z-axis from the normal vector
+            z_new = np.array(z_vector, dtype=float)
+            z_new /= np.linalg.norm(z_new)
+            # 2. Define the new X-axis using the reference vector
+            ref = np.array(x_vector, dtype=float)
+            ref /= np.linalg.norm(ref)
+            # If the magnitude of the cross product is nearly zero, they are parallel
+            if np.linalg.norm(np.cross(z_new, ref)) < 1e-6:
+                raise ValueError("The reference vector cannot be parallel to the normal vector.")
+            # Remove any component of ref that points along z_new (Gram-Schmidt orthogonalization)
+            x_new = ref - np.dot(ref, z_new) * z_new
+            x_new /= np.linalg.norm(x_new)
+            # 3. Complete the right-handed coordinate system by finding the new Y-axis
+            y_new = np.cross(z_new, x_new)
+            # 4. Construct the rotation matrix (where each row is one of the new axes)
+            R = np.vstack([x_new, y_new, z_new])
+            # 5. Apply the TRANSPOSE of the rotation to position and velocity columns
+        if not self.parallel:
+            self.data.loc[:, pos] = self.data[pos].values @ R.T
+            self.data.loc[:, vel] = self.data[vel].values @ R.T
+            self.reset_filter()
+        else:
+            # No calculations are done at this point on the parallel data, it will be done on demand.
+            self.reset_filter_parallel()
+        print("A coordinate rotation has been applied, and therefore the filter was reset.")
+        # store/update rotation
+        if replace or not hasattr(self, "rotation"):
+            self.rotation = R
+        else:
+            self.rotation = R @ self.rotation
+
+    def reset_rotation(self, undo=True): # includes filter reset
+        """
+            Reset rotation of coordinates. Resets filter too.
+            - undo: Set True if you want to apply the inverse of previous rotation(s) done to the data. 
+            Set to False if you just want to delete the attribute that stores the applied rotations, and do not want to change the data.
+
+            ATTENTION: After rotation-undoing, spatial data filters you apply need to be written with the new coordinates in mind!
+        """
+        if not hasattr(self, "rotation"):
+            print("No rotation found to reset.")
+            return
+        if undo:
+            print("Undoing rotation...")
+            self.data.loc[:, pos] = self.data[pos].values @ self.rotation
+            self.data.loc[:, vel] = self.data[vel].values @ self.rotation
+        self.reset_filter()
+        del self.rotation
+        print("Rotation was reset.")
+
+
     @property
     def data_filter(self):
         """
@@ -443,6 +512,11 @@ class Spherical(BrightifyModel):
             length=0.0001
             )
         plt.colorbar(sc, ax=ax)
+        if hasattr(self, "rotation"):
+            print("Attention: This plot is displaying data in new coordinates compared to the input data. \
+                    The input data was transformed by applying the following rotation matrix R in the sense `R * (x,y,z)^T` (column vectors):\n"
+                    +str(self.rotation))
+
 
 
     def save(self, outputFile):
@@ -665,6 +739,10 @@ class Flat(BrightifyModel):
         cbar.ax.tick_params(labelsize=18)
         cbar.ax.set_ylabel('brightness [n/s/cm$^2$/sr]', fontsize=18)
         plt.show()
+        if hasattr(self, "rotation"):
+            print("Attention: This plot is displaying data in new coordinates compared to the input data. \
+                    The input data was transformed by applying the following rotation matrix R in the sense `R * (x,y,z)^T` (column vectors):\n"
+                    +str(self.rotation))
 
     def plot_error_map(self, method=None, show_arrows=True):
         """
