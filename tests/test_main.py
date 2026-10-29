@@ -1,18 +1,8 @@
+### this file knows what "flat_model" (defined in conftest.py) is, once we import pytest
+
 import pytest
 from brightify.main import Flat, BrightifyModel
 import pandas as pd
-
-@pytest.fixture
-def flat_model():
-    return Flat(
-        inputFile="./tests/data.mcpl.gz", # this holds 100 neutrons with pdg code 2112
-        outputFile=None,
-        primary_protons=47_000_000,
-        pCurrent=1.0,
-        pos_size_x=1.0,
-        pos_size_y=1.0,
-        dir_size=6e-3,
-    )
 
 def test_model_creation(flat_model):
     assert isinstance(flat_model, Flat)
