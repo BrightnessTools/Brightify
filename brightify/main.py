@@ -191,8 +191,8 @@ class BrightifyModel:
             # 4. Construct the rotation matrix (where each row is one of the new axes)
             R = np.vstack([x_new, y_new, z_new])
             # 5. Apply the TRANSPOSE of the rotation to position and velocity columns
-        self.data.loc[:, pos] = self.data[pos].values @ R.T
-        self.data.loc[:, vel] = self.data[vel].values @ R.T
+        self.data[pos].values[:] = (self.data[pos].values @ R.T).astype(self.data[pos].dtypes.iloc[0])
+        self.data[vel].values[:] = (self.data[vel].values @ R.T).astype(self.data[vel].dtypes.iloc[0])
         self.reset_filter()
         print("A coordinate rotation has been applied, and therefore the filter was reset.")
         # store/update rotation
@@ -214,8 +214,8 @@ class BrightifyModel:
             return
         if undo:
             print("Undoing rotation...")
-            self.data.loc[:, pos] = self.data[pos].values @ self.rotation
-            self.data.loc[:, vel] = self.data[vel].values @ self.rotation
+            self.data[pos].values[:] = (self.data[pos].values @ self.rotation).astype(self.data[pos].dtypes.iloc[0])
+            self.data[vel].values[:] = (self.data[vel].values @ self.rotation).astype(self.data[vel].dtypes.iloc[0])
         self.reset_filter()
         del self.rotation
         print("Rotation was reset.")
