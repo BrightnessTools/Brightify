@@ -170,7 +170,7 @@ class BrightifyModel:
         # because v' = (v'^T)^T = (R * v^T)^T = (v^T)^T * R^T = v * R^T.
         # that means instead of R * v^T, we write v * R^T to apply R.
         # In order to reverse it, we write v' * R since that is (v * R^T)*R = v * 1 = v.
-        if matrix:
+        if matrix is not None:
             R = matrix
         else:
             # 1. Define the new Z-axis from the normal vector
@@ -190,13 +190,9 @@ class BrightifyModel:
             # 4. Construct the rotation matrix (where each row is one of the new axes)
             R = np.vstack([x_new, y_new, z_new])
             # 5. Apply the TRANSPOSE of the rotation to position and velocity columns
-        if not self.parallel:
-            self.data.loc[:, pos] = self.data[pos].values @ R.T
-            self.data.loc[:, vel] = self.data[vel].values @ R.T
-            self.reset_filter()
-        else:
-            # No calculations are done at this point on the parallel data, it will be done on demand.
-            self.reset_filter_parallel()
+        self.data.loc[:, pos] = self.data[pos].values @ R.T
+        self.data.loc[:, vel] = self.data[vel].values @ R.T
+        self.reset_filter()
         print("A coordinate rotation has been applied, and therefore the filter was reset.")
         # store/update rotation
         if replace or not hasattr(self, "rotation"):
