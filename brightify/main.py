@@ -911,4 +911,4 @@ class Flat(BrightifyModel):
             # Calculate relative error
         self.relative_error = self.r_err
                         
-        return self.brightness         
+        return self.brightness, self.relative_error     
