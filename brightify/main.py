@@ -191,8 +191,7 @@ class BrightifyModel:
             # 4. Construct the rotation matrix (where each row is one of the new axes)
             R = np.vstack([x_new, y_new, z_new])
             # 5. Apply the TRANSPOSE of the rotation to position and velocity columns
-        self.data[pos].values[:] = (self.data[pos].values @ R.T).astype(self.data[pos].dtypes.iloc[0])
-        self.data[vel].values[:] = (self.data[vel].values @ R.T).astype(self.data[vel].dtypes.iloc[0])
+        self._rotation_chunked(R.T)
         self.reset_filter()
         print("A coordinate rotation has been applied, and therefore the filter was reset.")
         # store/update rotation
@@ -200,6 +199,30 @@ class BrightifyModel:
             self.rotation = R
         else:
             self.rotation = R @ self.rotation
+
+    def _rotation_chunked(self, M, chunk_size=1_000_000):
+        """
+        Applies rotation matrix M from the right to position and velocity vectors, 
+        sequentially in row chunks to minimize RAM overhead.
+        """
+        # Get column integer positions once for fast indexing
+        pos_idx = self.data.columns.get_indexer(pos)
+        vel_idx = self.data.columns.get_indexer(vel)
+
+        dtype_pos = self.data[pos].dtypes.iloc[0]
+        dtype_vel = self.data[vel].dtypes.iloc[0]
+
+        # Process data sequentially in chunks
+        for start in range(0, len(self.data), chunk_size):
+            end = start + chunk_size
+            
+            # 1. Rotate positions for the current chunk
+            chunk_pos = self.data.iloc[start:end, pos_idx].to_numpy()
+            self.data.iloc[start:end, pos_idx] = (chunk_pos @ M).astype(dtype_pos)
+            
+            # 2. Rotate velocities for the current chunk
+            chunk_vel = self.data.iloc[start:end, vel_idx].to_numpy()
+            self.data.iloc[start:end, vel_idx] = (chunk_vel @ M).astype(dtype_vel)
 
     def reset_rotation(self, undo=True): # includes filter reset
         """
@@ -214,8 +237,7 @@ class BrightifyModel:
             return
         if undo:
             print("Undoing rotation...")
-            self.data[pos].values[:] = (self.data[pos].values @ self.rotation).astype(self.data[pos].dtypes.iloc[0])
-            self.data[vel].values[:] = (self.data[vel].values @ self.rotation).astype(self.data[vel].dtypes.iloc[0])
+            self._rotation_chunked(self.rotation)
         self.reset_filter()
         del self.rotation
         print("Rotation was reset.")
