@@ -181,3 +181,5 @@ cython_debug/
 # (Compressed) MCPL Data files
 .mcpl.gz
 .mcpl
+
+.diff

@@ -1,0 +1,56 @@
+<!--
+(HUMAN INSTRUCTION)
+This file describes a template of how a pull request should be formatted.
+You can send it together with a diff file to an LLM and it will understand.
+To obtain a diff file, run:
+git diff > my_changes.diff
+or:
+git diff --staged > my_changes.diff
+or something advanced like:
+git diff upstream/main...my-dev-branch > my_changes.diff
+(END OF HUMAN INSTRUCTION)
+-->
+
+<!--(PULL REQUEST TEMPLATE)-->
+IN GENERAL:
+- Each pull request (PR) shall cover only one topic ("atomic" PRs).
+- Change as little code as possible to make reviewing and merging easy.
+- Include a `pytest` test in the `tests` directory if relevant.
+- Ideally, test the code yourself before submitting a PR.
+
+1. TITLE
+- Keep it brief and descriptive. 
+- Optional keywords to prefix:
+    feat (new feature/calculation),
+    fix (bug fix),
+    perf (optimization),
+    docs (documentation).
+- Multiple keywords can be combined.
+- Examples: 'fix, perf: MCPL reading loop', 'feat: coordinates rotation'.
+
+2. DESCRIPTION:
+Use the following three point format:
+
+- What changed:
+Summary of the code changes.
+
+- Why it changed:
+The scientific or technical motivation.
+
+- How to test:
+Briefly describe how it could be tested/tried out (e.g. which methods to call). 
+If you have made a `pytest`, mention it here.
+
+<!--(END OF PULL REQUEST TEMPLATE)-->
+
+<!--
+(LLM GENERATION INSTRUCTIONS)
+For any LLM tools processing this together with a diff:
+1. You are supposed to create a pull request title and description according to the above template, based on the diff. 
+2. Read inline comments and docstrings in the diff for it may help understand the scientific/technical motivation (Why it changed).
+3. If you need more context on the code you cannot see in the diff, please ask the User for help, ideally topic by topic.
+4. Keep yourself brief, and fact based! Do not try too hard to imagine what the code authors are trying to achieve.
+5. If you can see any serious bug (nothing that's just quirky design), you may write about them after the description block. 
+6. At the end, output a text file if possible, or at least an easy-to-copy-paste text (e.g. without citation tags, if allowed).
+(END OF LLM GENERATION INSTRUCTIONS)
+-->
