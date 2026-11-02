@@ -19,8 +19,8 @@ flatModel.apply_filter(
     energy = (0.0, 2.0),
     )
 
-flatModel.calculate()
+flatModel.calculate("mean")
 
-flatModel.plot_brightness_map()
+flatModel.plot_brightness_map("mean")
 
-flatModel.plot_error_map()
+flatModel.plot_error_map("mean")
