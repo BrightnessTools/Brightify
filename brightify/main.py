@@ -157,13 +157,15 @@ class BrightifyModel:
 
     def apply_rotation(self, z_vector=[0,0,1], x_vector=[1,0,0], matrix=None, replace=False): # includes filter reset
         """
-        Rotates the coordinate system of the model's data such that:
+        Resets the filter and rotates the coordinate system of the model's data such that:
         - z_vector ([x,y,z]): Its direction is the Z-axis in the new data. This is required for 2D models like Flat which need Z to be the normal direction.
         - x_vector ([x,y,z]): Its projection onto the new X-Y-plane is the new X-axis.
         - matrix: Pass here any 3x3 matrix to be applied to the data instead of the two vector parameters. You should yourself ensure it is a rotation matrix.
         - replace: If True, the rotation that's saved in the model will be the method input's rotation, instead of the total rotation that results in combination with previously applied rotations.
 
-        ATTENTION: This resets any filter that had been applied. After rotation, spatial data filters you apply need to be written with the new coordinates in mind! 
+        ATTENTION: 1. This resets any filter that had been applied to the data via apply_filter(). 2. After rotation, spatial data filters you apply need to be written with the new coordinates in mind! 
+
+        Example: Swap x and z by specifying z_vector = [1,0,0] and x_vector = [0,0,1].
         """
         # this relies on self.rotation
         # reminder: usually, we calculate v'^T = R * v^T where v^T is a column vector.
@@ -230,7 +232,7 @@ class BrightifyModel:
             - undo: Set True if you want to apply the inverse of previous rotation(s) done to the data. 
             Set to False if you just want to delete the attribute that stores the applied rotations, and do not want to change the data.
 
-            ATTENTION: After rotation-undoing, spatial data filters you apply need to be written with the new coordinates in mind!
+            ATTENTION: 1. The filter will be reset. 2. After rotation-undoing, spatial data filters you apply need to be written with the new coordinates in mind!
         """
         if not hasattr(self, "rotation"):
             print("No rotation found to reset.")
@@ -696,6 +698,19 @@ class Flat(BrightifyModel):
         for attr in ["pos_size_x", "pos_size_y", "pos_size"]:
             if getattr(self, attr, None) is None:
                 raise ValueError("The model is missing a critical attribute: "+attr)
+
+        # --- 4. Evaluate data and suggest rotation ---
+        constant_columns = set()
+        for col in ("x", "y", "z"):
+            mean = self.data[col].mean()
+            if np.allclose(self.data[col], mean):
+                constant_columns.add(col)
+        if "z" in constant_columns:
+            pass
+        elif "x" in constant_columns or "y" in constant_columns:
+            print("It has been detected that the position z coordinate is not constant, but x or y is.",
+                  "\nAs the Flat model code relies on z being the normal on the brightness map surface spanned by x and y,",
+                  "\nit is highly recommended to use flat_model.apply_rotation(), which does allow for simple axis swaps too.")
 
 
     #------------------ Helper: prepare meshgrid ------------------#
