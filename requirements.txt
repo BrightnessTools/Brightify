@@ -3,3 +3,4 @@ pandas>=1.4
 matplotlib>=3.4
 tqdm==4.66.1
 mcpl
+zenodo-get
