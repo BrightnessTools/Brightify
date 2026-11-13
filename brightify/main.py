@@ -164,7 +164,7 @@ class BrightifyModel:
 
         ATTENTION: 1. This resets any filter that had been applied to the data via apply_filter(). 2. After rotation, spatial data filters you apply need to be written with the new coordinates in mind! 
 
-        Example: Swap x and z by specifying z_vector = [1,0,0] and x_vector = [0,0,1].
+        Example: Swap x and z by specifying z_vector = [1,0,0] and x_vector = [0,0,1]. Note that this flips y towards -y, because the spatial ordering of the axes remains the same (right hand 3-finger-rule).
         """
         # this relies on self.rotation
         # reminder: usually, we calculate v'^T = R * v^T where v^T is a column vector.
