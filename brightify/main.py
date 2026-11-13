@@ -164,17 +164,40 @@ class BrightifyModel:
     #         )
     #     return data  
 
-    def apply_rotation(self, z_vector=[0,0,1], x_vector=[1,0,0], matrix=None, replace=False): # includes filter reset
-        """
-        Resets the filter and rotates the coordinate system of the model's data such that:
-        - z_vector ([x,y,z]): Its direction is the Z-axis in the new data. This is required for 2D models like Flat which need Z to be the normal direction.
-        - x_vector ([x,y,z]): Its projection onto the new X-Y-plane is the new X-axis.
-        - matrix: Pass here any 3x3 matrix to be applied to the data instead of the two vector parameters. You should yourself ensure it is a rotation matrix.
-        - replace: If True, the rotation that's saved in the model will be the method input's rotation, instead of the total rotation that results in combination with previously applied rotations.
+    def apply_rotation(
+        self,
+        z_vector=[0, 0, 1],
+        x_vector=[1, 0, 0],
+        matrix=None,
+        replace=False,
+    ):  # includes filter reset
+        """Reset the filter and rotate the model's coordinate system data.
 
-        ATTENTION: 1. This resets any filter that had been applied to the data via apply_filter(). 2. After rotation, spatial data filters you apply need to be written with the new coordinates in mind! 
+        This method rotates the coordinate system based on either the provided
+        vector pair or a custom 3x3 rotation matrix.
 
-        Example: Swap x and z by specifying z_vector = [1,0,0] and x_vector = [0,0,1]. Note that this flips y towards -y, because the spatial ordering of the axes remains the same (right hand 3-finger-rule).
+        Args:
+            z_vector (list-like, optional): Vector whose direction becomes 
+                the new Z-axis. Required for 2D models like Flat where Z is 
+                the normal direction. Defaults to [0, 0, 1].
+            x_vector (list-like, optional): Vector whose projection onto the 
+                new X-Y plane becomes the new X-axis. Defaults to [1, 0, 0].
+            matrix (array-like, optional): A 3x3 rotation matrix to apply 
+                instead of the vector parameters. The caller must ensure it 
+                is a valid rotation matrix. Defaults to None.
+            replace (bool, optional): If True, the rotation saved in the model 
+                will be the direct method input, rather than compounding with 
+                previously applied rotations. Defaults to False.
+
+        Note:
+            1. This resets any filters previously applied via `apply_filter()`.
+            2. Subsequent spatial data filters must be written using the new 
+               coordinate system.
+
+        Example:
+            Swap X and Z axes by specifying `z_vector = [1, 0, 0]` and 
+            `x_vector = [0, 0, 1]`. Note that this flips Y towards -Y to 
+            preserve the right-hand rule coordinate orientation.
         """
         # this relies on self.rotation
         # reminder: usually, we calculate v'^T = R * v^T where v^T is a column vector.
