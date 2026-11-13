@@ -106,6 +106,16 @@ class BrightifyModel:
                     for k,v in dataDict.items():
                         self.__dict__[k] = v
                     print("Parameters/attributes from outputFile were loaded.")
+                    # handle the rotation restoring:
+                    if hasattr(self, "rotation"):
+                        print("A rotation was found in the loaded attributes")
+                        if hasattr(self, "data"):
+                            print("The rotation will be re-applied to the data now.")
+                            self.apply_rotation(matrix=self.rotation, replace=True)
+                        else:
+                            print("No data exists that the rotation can be re-applied to. The rotation will be discarded now. " \
+                            "Once a data exists again, you need to reapply the following rotation matrix yourself: "+str(self.rotation))
+                            del self.rotation
                 else:
                     print("No parameters/attributes from outputFile were loaded because the entered parameters are different.")
             except: # In this case, self.outputFile is just the location where future results are supposed to be stored
@@ -624,7 +634,7 @@ class Spherical(BrightifyModel):
                 'particle', 'energy', 'radius', 'spiral_points', 'spiral',
                 'pos_window', 'dir_window', 'total_neutrons', 'total_weights',
                 'window_weights', 'total_mean', 'relative_error', 'mean_directions',
-                'mean_directions_window'
+                'mean_directions_window', 'rotation'
                 )
         
         # Create a dictionary of data to save
@@ -801,7 +811,7 @@ class Flat(BrightifyModel):
             'particle', 'energy', 'dir_window', 'x_min', 'x_max', 'y_min',
             'y_max', 'x_range', 'y_range',
             'x_mesh', 'y_mesh', 'z_mesh', 'total_neutrons', 'total_weights',
-            'window_weights', 'total_mean', 'relative_error', 'sigma'
+            'window_weights', 'total_mean', 'relative_error', 'sigma', 'rotation'
             )
         if method == "mean":
             common_keys += (
