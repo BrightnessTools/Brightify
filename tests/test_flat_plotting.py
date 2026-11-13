@@ -12,7 +12,15 @@ from brightify.main import Flat
 
 class FlatPlottingTest(unittest.TestCase):
     def setUp(self):
-        self.model = Flat(pos_size_x=4.0, pos_size_y=8.0)
+        self.model = Flat(
+            inputFile="./tests/data.mcpl.gz", # this holds 100 neutrons with pdg code 2112 (Dummy data for these tests here)
+            outputFile=None,
+            primary_protons=4.0,
+            pCurrent=2.0,
+            pos_size_x=4.0,
+            pos_size_y=8.0,
+            dir_size=1.0,
+            )
         self.model.x_range = np.array([0.0, 1.0, 2.0])
         self.model.y_range = np.array([10.0, 12.0])
         self.model.x_mesh, self.model.y_mesh = np.meshgrid(
@@ -20,9 +28,6 @@ class FlatPlottingTest(unittest.TestCase):
         )
         self.model.x_min, self.model.x_max = 0.25, 1.75
         self.model.y_min, self.model.y_max = 10.25, 11.75
-        self.model.dir_size = 1.0
-        self.model.pCurrent = 2.0
-        self.model.primary_protons = 4.0
         self.model.window_weights = np.arange(1.0, 7.0)
         self.model.relative_error = np.arange(11.0, 17.0)
         self.model.mean_directions = np.tile([1.0, 1.0, 1.0], (6, 1))
