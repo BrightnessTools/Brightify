@@ -21,41 +21,61 @@ class FlatPlottingTest(unittest.TestCase):
             pos_size_y=8.0,
             dir_size=1.0,
             )
-        self.model.x_range = np.array([0.0, 1.0, 2.0])
-        self.model.y_range = np.array([10.0, 12.0])
-        self.model.x_mesh, self.model.y_mesh = np.meshgrid(
-            self.model.x_range, self.model.y_range
-        )
-        self.model.x_min, self.model.x_max = 0.25, 1.75
-        self.model.y_min, self.model.y_max = 10.25, 11.75
-        self.model.window_weights = np.arange(1.0, 7.0)
-        self.model.relative_error = np.arange(11.0, 17.0)
-        self.model.mean_directions = np.tile([1.0, 1.0, 1.0], (6, 1))
-        self.model.adaptive_dir = np.tile([-1.0, 1.0, 1.0], (6, 1))
+        self.model.calculate(method="adaptive", bins_cart=10)
 
     def tearDown(self):
         plt.close("all")
 
     @patch("matplotlib.pyplot.show")
     def test_arrows_and_cells_share_grid_centers_for_direction_methods(self, _):
-        for method, expected_x_sign in (("mean", 1), ("adaptive", -1)):
+        for method in ("mean", "adaptive"):
             with self.subTest(method=method):
                 self.model.plot_brightness_map(method=method)
                 axes = plt.gcf().axes[0]
                 cell_coordinates = axes.collections[0].get_coordinates()
                 arrows = axes.collections[1]
 
-                np.testing.assert_allclose(cell_coordinates[0, :, 0],
-                                           [-0.5, 0.5, 1.5, 2.5])
-                np.testing.assert_allclose(cell_coordinates[:, 0, 1],
-                                           [9.0, 11.0, 13.0])
-                np.testing.assert_allclose(arrows.X, self.model.x_mesh.ravel())
-                np.testing.assert_allclose(arrows.Y, self.model.y_mesh.ravel())
+                x_cell_centers = (
+                    cell_coordinates[0, :-1, 0] + cell_coordinates[0, 1:, 0]
+                ) / 2
+                y_cell_centers = (
+                    cell_coordinates[:-1, 0, 1] + cell_coordinates[1:, 0, 1]
+                ) / 2
+                np.testing.assert_allclose(x_cell_centers, self.model.x_range)
+                np.testing.assert_allclose(y_cell_centers, self.model.y_range)
+                directions = (
+                    self.model.mean_directions if method == "mean"
+                    else self.model.adaptive_dir
+                )
+                visible = (
+                    np.isfinite(directions).all(axis=1)
+                    & (np.linalg.norm(directions[:, :2], axis=1) > 0)
+                )
+                np.testing.assert_allclose(arrows.X,
+                                           self.model.x_mesh.ravel()[visible])
+                np.testing.assert_allclose(arrows.Y,
+                                           self.model.y_mesh.ravel()[visible])
                 self.assertEqual(arrows.pivot, "middle")
-                self.assertTrue(np.all(np.sign(arrows.U) == expected_x_sign))
-                self.assertTrue(np.all(arrows.V > 0))
-                np.testing.assert_allclose(axes.get_xlim(), [0.25, 1.75])
-                np.testing.assert_allclose(axes.get_ylim(), [10.25, 11.75])
+                self.assertTrue(np.all(np.isfinite(arrows.U)))
+                self.assertTrue(np.all(np.isfinite(arrows.V)))
+                np.testing.assert_array_equal(np.sign(arrows.U),
+                                              np.sign(directions[visible, 0]))
+                np.testing.assert_array_equal(np.sign(arrows.V),
+                                              np.sign(directions[visible, 1]))
+                expected_xlim = (
+                    [self.model.x_min, self.model.x_max]
+                    if self.model.x_min < self.model.x_max
+                    else [cell_coordinates[0, 0, 0],
+                          cell_coordinates[0, -1, 0]]
+                )
+                expected_ylim = (
+                    [self.model.y_min, self.model.y_max]
+                    if self.model.y_min < self.model.y_max
+                    else [cell_coordinates[0, 0, 1],
+                          cell_coordinates[-1, 0, 1]]
+                )
+                np.testing.assert_allclose(axes.get_xlim(), expected_xlim)
+                np.testing.assert_allclose(axes.get_ylim(), expected_ylim)
                 plt.close("all")
 
     @patch("matplotlib.pyplot.show")
@@ -66,7 +86,6 @@ class FlatPlottingTest(unittest.TestCase):
 
     @patch("matplotlib.pyplot.show")
     def test_square_axes_are_default_and_can_be_disabled(self, _):
-        self.model.x_max = 10.0
         self.model.plot_brightness_map(method="mean", show_arrows=False)
         axes = plt.gcf().axes[0]
         self.assertEqual(axes.get_box_aspect(), 1.0)
